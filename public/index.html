@@ -13,18 +13,8 @@
       min-height: 100vh;
       padding: 30px 20px;
     }
-    h1 {
-      text-align: center;
-      font-size: 2rem;
-      color: #a78bfa;
-      margin-bottom: 6px;
-    }
-    .subtitle {
-      text-align: center;
-      color: #666;
-      font-size: 0.85rem;
-      margin-bottom: 30px;
-    }
+    h1 { text-align: center; font-size: 2rem; color: #a78bfa; margin-bottom: 6px; }
+    .subtitle { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 30px; }
     .container { max-width: 860px; margin: 0 auto; }
 
     .card {
@@ -34,13 +24,7 @@
       padding: 24px;
       margin-bottom: 24px;
     }
-    .card h2 {
-      font-size: 1rem;
-      color: #a78bfa;
-      margin-bottom: 16px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
+    .card h2 { font-size: 1rem; color: #a78bfa; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }
 
     label { display: block; font-size: 0.82rem; color: #888; margin-bottom: 5px; }
     input[type="text"], input[type="password"], textarea {
@@ -71,24 +55,13 @@
     button:hover { background: #6d28d9; }
     button.danger { background: #7f1d1d; }
     button.danger:hover { background: #991b1b; }
-    button.copy-btn {
-      background: #1e293b;
-      font-size: 0.78rem;
-      padding: 5px 12px;
-    }
+    button.copy-btn { background: #1e293b; font-size: 0.78rem; padding: 5px 12px; }
     button.copy-btn:hover { background: #334155; }
 
-    .msg {
-      margin-top: 10px;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      display: none;
-    }
+    .msg { margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; display: none; }
     .msg.success { background: #14532d; color: #86efac; display: block; }
     .msg.error   { background: #7f1d1d; color: #fca5a5; display: block; }
 
-    /* Scripts list */
     #script-list { display: flex; flex-direction: column; gap: 10px; }
     .script-item {
       background: #0f0f13;
@@ -96,37 +69,30 @@
       border-radius: 8px;
       padding: 14px 16px;
       display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 10px;
     }
-    .script-info { flex: 1; min-width: 0; }
-    .script-name {
-      font-weight: 600;
-      color: #c4b5fd;
-      font-size: 0.95rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    .script-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .script-name { font-weight: 600; color: #c4b5fd; font-size: 0.95rem; }
     .script-meta { font-size: 0.75rem; color: #555; margin-top: 2px; }
+    .script-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .loadstring-row { display: flex; gap: 8px; align-items: center; }
     .url-box {
+      flex: 1;
       background: #1a1a24;
       border: 1px solid #2a2a3a;
       border-radius: 6px;
-      padding: 6px 10px;
+      padding: 8px 12px;
       font-family: 'Courier New', monospace;
-      font-size: 0.75rem;
-      color: #888;
-      flex: 2;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 0.78rem;
+      color: #a0a0b0;
+      word-break: break-all;
+      white-space: pre-wrap;
+      user-select: all;
     }
-    .script-actions { display: flex; gap: 8px; }
-    .empty { color: #444; text-align: center; padding: 30px; font-size: 0.9rem; }
 
+    .empty { color: #444; text-align: center; padding: 30px; font-size: 0.9rem; }
     .row { display: flex; gap: 14px; }
     .row > * { flex: 1; }
   </style>
@@ -136,7 +102,6 @@
   <h1>⚡ ScriptHost</h1>
   <p class="subtitle">Your personal Lua script cloud</p>
 
-  <!-- Upload Card -->
   <div class="card">
     <h2>Upload Script</h2>
     <div class="row">
@@ -150,12 +115,11 @@
       </div>
     </div>
     <label>Script Content (Lua)</label>
-    <textarea id="script-content" placeholder="-- paste your Lua script here&#10;print('Hello from ScriptHost!')"></textarea>
+    <textarea id="script-content" placeholder="-- paste your Lua script here"></textarea>
     <button onclick="uploadScript()">Upload Script</button>
     <div id="upload-msg" class="msg"></div>
   </div>
 
-  <!-- Scripts List Card -->
   <div class="card">
     <h2>Your Scripts</h2>
     <div id="script-list"><div class="empty">Loading...</div></div>
@@ -164,6 +128,9 @@
 
 <script>
   const BASE = window.location.origin;
+
+  // Store loadstrings by script name so copy buttons can access them safely
+  const loadstrings = {};
 
   async function loadScripts() {
     const res = await fetch('/api/scripts');
@@ -175,22 +142,61 @@
       return;
     }
 
-    list.innerHTML = scripts.map(s => {
+    list.innerHTML = '';
+
+    scripts.forEach(s => {
       const rawUrl = `${BASE}/raw/${s.name}`;
       const loadstr = `loadstring(game:HttpGet("${rawUrl}"))()`;
-      return `
-        <div class="script-item">
+      loadstrings[s.name] = loadstr;
+
+      const item = document.createElement('div');
+      item.className = 'script-item';
+      item.innerHTML = `
+        <div class="script-top">
           <div class="script-info">
             <div class="script-name">📜 ${s.name}</div>
             <div class="script-meta">${s.lines} lines · ${(s.size/1024).toFixed(1)}KB · ${new Date(s.updated).toLocaleDateString()}</div>
           </div>
-          <div class="url-box" title="${loadstr}">${loadstr}</div>
           <div class="script-actions">
-            <button class="copy-btn" onclick="copyText(\`${loadstr}\`, this)">Copy</button>
-            <button class="danger" onclick="deleteScript('${s.name}')">Delete</button>
+            <button class="copy-btn" id="copy-${s.name}">Copy</button>
+            <button class="danger" id="del-${s.name}">Delete</button>
           </div>
-        </div>`;
-    }).join('');
+        </div>
+        <div class="loadstring-row">
+          <div class="url-box" id="ls-${s.name}">${loadstr}</div>
+        </div>
+      `;
+      list.appendChild(item);
+
+      // Attach events via JS so no inline escaping issues
+      document.getElementById(`copy-${s.name}`).addEventListener('click', () => {
+        copyText(s.name);
+      });
+      document.getElementById(`del-${s.name}`).addEventListener('click', () => {
+        deleteScript(s.name);
+      });
+    });
+  }
+
+  function copyText(name) {
+    const text = loadstrings[name];
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById(`copy-${name}`);
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    }).catch(() => {
+      // Fallback for older browsers
+      const box = document.getElementById(`ls-${name}`);
+      const range = document.createRange();
+      range.selectNode(box);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      document.execCommand('copy');
+      window.getSelection().removeAllRanges();
+      const btn = document.getElementById(`copy-${name}`);
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
   }
 
   async function uploadScript() {
@@ -231,13 +237,6 @@
     const data = await res.json();
     if (data.success) loadScripts();
     else alert('Error: ' + data.error);
-  }
-
-  function copyText(text, btn) {
-    navigator.clipboard.writeText(text);
-    const orig = btn.textContent;
-    btn.textContent = 'Copied!';
-    setTimeout(() => btn.textContent = orig, 1500);
   }
 
   loadScripts();
