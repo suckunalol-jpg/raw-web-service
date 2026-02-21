@@ -1,0 +1,93 @@
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const SCRIPTS_DIR = path.join(__dirname, "scripts");
+const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || "changeme123"; // CHANGE THIS
+
+// Make sure scripts folder exists
+if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR);
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, "public")));
+
+// ─── GET RAW SCRIPT (this is what loadstring uses) ───────────────────────────
+// Usage: loadstring(game:HttpGet("http://yoursite.com/raw/myscript"))()
+app.get("/raw/:name", (req, res) => {
+  const scriptPath = path.join(SCRIPTS_DIR, req.params.name + ".lua");
+  if (!fs.existsSync(scriptPath)) {
+    return res.status(404).send("-- Script not found");
+  }
+  res.setHeader("Content-Type", "text/plain");
+  res.send(fs.readFileSync(scriptPath, "utf8"));
+});
+
+// ─── LIST ALL SCRIPTS (API) ───────────────────────────────────────────────────
+app.get("/api/scripts", (req, res) => {
+  const files = fs.existsSync(SCRIPTS_DIR)
+    ? fs.readdirSync(SCRIPTS_DIR).filter((f) => f.endsWith(".lua"))
+    : [];
+  const scripts = files.map((f) => {
+    const name = f.replace(".lua", "");
+    const stat = fs.statSync(path.join(SCRIPTS_DIR, f));
+    const content = fs.readFileSync(path.join(SCRIPTS_DIR, f), "utf8");
+    return {
+      name,
+      size: stat.size,
+      lines: content.split("\n").length,
+      updated: stat.mtime,
+    };
+  });
+  res.json(scripts);
+});
+
+// ─── UPLOAD / UPDATE A SCRIPT ─────────────────────────────────────────────────
+app.post("/api/upload", (req, res) => {
+  const { password, name, content } = req.body;
+
+  if (password !== UPLOAD_PASSWORD) {
+    return res.status(401).json({ error: "Wrong password!" });
+  }
+
+  if (!name || !content) {
+    return res.status(400).json({ error: "Name and content are required." });
+  }
+
+  // Sanitize name: only allow letters, numbers, dashes, underscores
+  const safeName = name.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!safeName) {
+    return res.status(400).json({ error: "Invalid script name." });
+  }
+
+  const scriptPath = path.join(SCRIPTS_DIR, safeName + ".lua");
+  fs.writeFileSync(scriptPath, content, "utf8");
+
+  res.json({ success: true, name: safeName, url: `/raw/${safeName}` });
+});
+
+// ─── DELETE A SCRIPT ──────────────────────────────────────────────────────────
+app.delete("/api/scripts/:name", (req, res) => {
+  const { password } = req.body;
+
+  if (password !== UPLOAD_PASSWORD) {
+    return res.status(401).json({ error: "Wrong password!" });
+  }
+
+  const scriptPath = path.join(SCRIPTS_DIR, req.params.name + ".lua");
+  if (!fs.existsSync(scriptPath)) {
+    return res.status(404).json({ error: "Script not found." });
+  }
+
+  fs.unlinkSync(scriptPath);
+  res.json({ success: true });
+});
+
+app.listen(PORT, () => {
+  console.log(`\n🚀 ScriptHost running at http://localhost:${PORT}`);
+  console.log(`📜 Raw scripts at: http://localhost:${PORT}/raw/<scriptname>`);
+  console.log(`🔑 Upload password: ${UPLOAD_PASSWORD}\n`);
+});
