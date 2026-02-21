@@ -1,7 +1,6 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,9 +14,40 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// ─── ALLOWED USER AGENTS (Roblox + popular executors) ────────────────────────
+// Checked against the incoming User-Agent header (case-insensitive).
+// Add more executor UAs here if needed.
+const ALLOWED_UA_PATTERNS = [
+  /roblox/i,        // Roblox's built-in HttpGet: "Roblox/WinInet"
+  /synapse/i,       // Synapse X
+  /script-ware/i,   // Script-Ware
+  /scriptware/i,
+  /krnl/i,          // KRNL
+  /fluxus/i,        // Fluxus
+  /oxygen/i,        // Oxygen U
+  /evon/i,          // Evon
+  /arceus/i,        // Arceus X
+  /codex/i,         // Codex
+  /delta/i,         // Delta executor
+  /wave/i,          // Wave
+  /macsploit/i,     // MacSploit
+  /sentinel/i,      // Sentinel
+];
+
 // ─── GET RAW SCRIPT (this is what loadstring uses) ───────────────────────────
-// Usage: loadstring(game:HttpGet("http://yoursite.com/raw/myscript"))()
+// Usage: loadstring(game:HttpGet("https://yoursite.com/raw/myscript"))()
 app.get("/raw/:name", (req, res) => {
+  const ua = req.headers["user-agent"] || "";
+  const isAllowed = ALLOWED_UA_PATTERNS.some((pattern) => pattern.test(ua));
+
+  if (!isAllowed) {
+    // Show a fake generic 404 to anyone browsing with a browser
+    return res.status(404).send(`<!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1><p>The requested URL was not found on this server.</p></body>
+</html>`);
+  }
+
   const scriptPath = path.join(SCRIPTS_DIR, req.params.name + ".lua");
   if (!fs.existsSync(scriptPath)) {
     return res.status(404).send("-- Script not found");
@@ -52,7 +82,6 @@ app.post("/api/upload", (req, res) => {
   if (password !== UPLOAD_PASSWORD) {
     return res.status(401).json({ error: "Wrong password!" });
   }
-
   if (!name || !content) {
     return res.status(400).json({ error: "Name and content are required." });
   }
