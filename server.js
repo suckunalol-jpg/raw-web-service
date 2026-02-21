@@ -10,8 +10,8 @@ const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || "changeme123"; // CHANGE 
 // Make sure scripts folder exists
 if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // ─── ALLOWED USER AGENTS (Roblox + popular executors) ────────────────────────
