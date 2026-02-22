@@ -1,122 +1,423 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
+const fs      = require("fs");
+const path    = require("path");
+const crypto  = require("crypto");
+const { v4: uuidv4 } = require("uuid");
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
-const SCRIPTS_DIR = path.join(__dirname, "scripts");
-const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || "changeme123"; // CHANGE THIS
+const SCRIPTS_DIR    = path.join(__dirname, "scripts");
+const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || "spaxisgay";
 
-// Make sure scripts folder exists
+app.set("trust proxy", 1);
 if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR);
-
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// ─── ALLOWED USER AGENTS (Roblox + popular executors) ────────────────────────
-// Checked against the incoming User-Agent header (case-insensitive).
-// Add more executor UAs here if needed.
-const ALLOWED_UA_PATTERNS = [
-  /roblox/i,        // Roblox's built-in HttpGet: "Roblox/WinInet"
-  /synapse/i,       // Synapse X
-  /script-ware/i,   // Script-Ware
-  /scriptware/i,
-  /krnl/i,          // KRNL
-  /fluxus/i,        // Fluxus
-  /oxygen/i,        // Oxygen U
-  /evon/i,          // Evon
-  /arceus/i,        // Arceus X
-  /codex/i,         // Codex
-  /delta/i,         // Delta executor
-  /wave/i,          // Wave
-  /macsploit/i,     // MacSploit
-  /sentinel/i,      // Sentinel
+// ══════════════════════════════════════════════════════════════════════════════
+//  LAYER 1 — UA WHITELIST / BROWSER BLOCKLIST
+// ══════════════════════════════════════════════════════════════════════════════
+const ALLOWED_UA = [
+  "Roblox/WinInet","RobloxStudio","ROBLOX/",
+  "Synapse/","SynapseX","KRNL/","Krnl/",
+  "fluxus","Fluxus","Script-Ware","scriptware",
+  "Oxygen U","OxygenU","Evon/","Delta/","Wave/",
+  "Arceus X","ArceusX","Codex/","Sentinel/","MacSploit","Electron/",
 ];
+const BROWSER_POISON = [
+  "Mozilla/5.0","AppleWebKit","Gecko/","Chrome/","Safari/",
+  "Firefox/","OPR/","Trident/","Edge/","Edg/",
+  "curl/","wget/","python-requests","axios/","node-fetch",
+  "PostmanRuntime","insomnia","HTTPie","Go-http-client","Java/","libwww-perl",
+];
+function validateUA(ua) {
+  if (!ua || ua.length < 4) return false;
+  if (!ALLOWED_UA.some(s => ua.includes(s))) return false;
+  if (BROWSER_POISON.some(s => ua.includes(s))) return false;
+  return true;
+}
 
-// ─── GET RAW SCRIPT (this is what loadstring uses) ───────────────────────────
-// Usage: loadstring(game:HttpGet("https://yoursite.com/raw/myscript"))()
-app.get("/raw/:name", (req, res) => {
-  const ua = req.headers["user-agent"] || "";
-  const isAllowed = ALLOWED_UA_PATTERNS.some((pattern) => pattern.test(ua));
+// ══════════════════════════════════════════════════════════════════════════════
+//  LAYER 2 — RATE LIMITING
+// ══════════════════════════════════════════════════════════════════════════════
+const rateStore = new Map();
+const RATE_WINDOW = 60_000, RATE_MAX = 20;
+function checkRate(ip) {
+  const now = Date.now();
+  let e = rateStore.get(ip);
+  if (!e || now - e.t > RATE_WINDOW) e = { count: 1, t: now };
+  else e.count++;
+  rateStore.set(ip, e);
+  return e.count <= RATE_MAX;
+}
 
-  if (!isAllowed) {
-    // Show a fake generic 404 to anyone browsing with a browser
-    return res.status(404).send(`<!DOCTYPE html>
-<html><head><title>404 Not Found</title></head>
-<body><h1>404 Not Found</h1><p>The requested URL was not found on this server.</p></body>
-</html>`);
-  }
-
-  const scriptPath = path.join(SCRIPTS_DIR, req.params.name + ".lua");
-  if (!fs.existsSync(scriptPath)) {
-    return res.status(404).send("-- Script not found");
-  }
-  res.setHeader("Content-Type", "text/plain");
-  res.send(fs.readFileSync(scriptPath, "utf8"));
+// ══════════════════════════════════════════════════════════════════════════════
+//  LAYER 3 — HONEYPOT
+// ══════════════════════════════════════════════════════════════════════════════
+const banned = new Set();
+function fake404(res) {
+  return res.status(404).send("<!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>");
+}
+["scripts","script","lua","raw","src","source","get","files"].forEach(p => {
+  app.get(`/${p}/:x`, (req, res) => { banned.add(req.ip); return fake404(res); });
 });
 
-// ─── LIST ALL SCRIPTS (API) ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  LAYER 4 — KEY SYSTEM
+// ══════════════════════════════════════════════════════════════════════════════
+const KEYS_FILE = path.join(__dirname, "keys.json");
+function readKeys()  { try { return JSON.parse(fs.readFileSync(KEYS_FILE,"utf8")); } catch { return {}; } }
+function writeKeys(d){ fs.writeFileSync(KEYS_FILE, JSON.stringify(d,null,2)); }
+
+function validateKey(keyStr, hwid) {
+  const keys = readKeys();
+  const k    = keys[keyStr];
+  if (!k)            return { ok: false, code: "KEY_INVALID" };
+  if (!k.active)     return { ok: false, code: "KEY_REVOKED" };
+  if (Date.now() > k.expires) return { ok: false, code: "KEY_EXPIRED" };
+  if (k.maxUses && k.uses >= k.maxUses) return { ok: false, code: "KEY_USED" };
+  if (!k.hwid) {
+    k.hwid  = hwid;
+    k.uses  = (k.uses || 0) + 1;
+    keys[keyStr] = k;
+    writeKeys(keys);
+    return { ok: true, bound: true };
+  }
+  if (k.hwid !== hwid) return { ok: false, code: "KEY_HWID_MISMATCH" };
+  k.uses = (k.uses || 0) + 1;
+  keys[keyStr] = k;
+  writeKeys(keys);
+  return { ok: true, bound: false };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  LAYER 5 — ONE-TIME SESSION TOKENS (30s TTL)
+// ══════════════════════════════════════════════════════════════════════════════
+const tokens = new Map();
+const TOKEN_TTL = 30_000;
+function mintToken(scriptName, hwid, ip) {
+  const t = crypto.randomBytes(48).toString("hex");
+  tokens.set(t, { scriptName, hwid, ip, born: Date.now(), used: false });
+  setTimeout(() => tokens.delete(t), TOKEN_TTL + 5000);
+  return t;
+}
+function burnToken(t, hwid, ip) {
+  const e = tokens.get(t);
+  if (!e)              return { ok: false, reason: "invalid_token" };
+  if (e.used)          return { ok: false, reason: "token_already_used" };
+  if (Date.now() - e.born > TOKEN_TTL) { tokens.delete(t); return { ok: false, reason: "token_expired" }; }
+  if (e.hwid !== hwid) return { ok: false, reason: "hwid_mismatch" };
+  const sub = x => x.split(".").slice(0,3).join(".");
+  if (sub(e.ip) !== sub(ip)) console.warn(`[SUBNET WARN] token=${e.ip} req=${ip}`);
+  e.used = true;
+  tokens.delete(t);
+  return { ok: true, scriptName: e.scriptName };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  LAYER 6 — OBFUSCATION + ANTI-DUMP ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+function r4() { return "_" + crypto.randomBytes(4).toString("hex"); }
+function encStr(s) { return "string.char(" + Array.from(s).map(c=>c.charCodeAt(0)).join(",") + ")"; }
+function xorEncode(src, key) {
+  const out = [];
+  for (let i = 0; i < src.length; i++) out.push(src.charCodeAt(i) ^ key);
+  return out;
+}
+
+function buildPayload(src, hwid, scriptName) {
+  const key   = (Math.floor(Math.random() * 180) + 30) | 0;
+  const enc   = xorEncode(src, key);
+  // Split encoded array into multiple chunks (harder to reconstruct)
+  const chunkSize = 120;
+  const chunks = [];
+  for (let i = 0; i < enc.length; i += chunkSize) {
+    chunks.push("{" + enc.slice(i, i + chunkSize).join(",") + "}");
+  }
+  const chunkVars = chunks.map((c, i) => { const v = r4(); return { v, def: `local ${v}=${c}` }; });
+
+  // Random var names every request
+  const [vK,vH,vD,vF,vG,vT,vC,vR,vB,vN,vS,vX] = Array.from({length:12}, r4);
+
+  const eHWID = encStr(hwid);
+  const eKick = encStr("pcall(function()game:GetService(\"TeleportService\"):Teleport(0)end)");
+
+  // Build chunk concatenation
+  const joinExpr = chunkVars.map(cv => cv.v).join(",");
+
+  return `-- PubArmour Protected
+local ${vT}=tick
+local ${vC}=string.char
+local ${vR}=table.concat
+local ${vB}=math.floor
+local ${vG}=loadstring or load
+local ${vK}=${key}
+local ${vH}=${eHWID}
+local ${vN}=game and game.GetService
+-- ANTI-CONTEXT: must be real Roblox
+if not ${vN} then error("ctx",2) end
+-- ANTI-TIMING: reject debugger pauses / slow env
+local _t0=${vT}()
+${chunkVars.map(cv=>cv.def).join("\n")}
+local ${vD}={}
+local _ci,_di=1,1
+local _chunks={${joinExpr}}
+for _,_ch in ipairs(_chunks) do
+  for _j=1,#_ch do ${vD}[_di]=${vC}(${vB}(_ch[_j])~${vK}) _di=_di+1 end
+end
+local _t1=${vT}()
+if (_t1-_t0)>3 then
+  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  error(${encStr("[PubArmour] Timing violation.")},2) return
+end
+-- ANTI-DUMP: verify loadstring not hooked
+if type(${vG})~="function" or type(${vG}("return 1"))~="function" then
+  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  error(${encStr("[PubArmour] Integrity check failed.")},2) return
+end
+-- HWID RE-CHECK at runtime
+local _hw,_hok
+_hok=pcall(function() _hw=tostring(game:GetService("RbxAnalyticsService"):GetClientId()) end)
+if not _hok or not _hw or _hw=="" then
+  _hw=tostring(game:GetService("Players").LocalPlayer.UserId)
+end
+if _hw~=${vH} then
+  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  error(${encStr("[PubArmour] HWID mismatch.")},2) return
+end
+-- EXECUTE
+local ${vF}=${vR}(${vD})
+local _fn,_er=${vG}(${vF})
+if not _fn then
+  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  error(tostring(_er),2)
+end
+return _fn()`.trim();
+}
+
+function kickResponse(code) {
+  const msgs = {
+    KEY_INVALID:       "Invalid key.",
+    KEY_REVOKED:       "Your key has been revoked.",
+    KEY_EXPIRED:       "Your key has expired.",
+    KEY_USED:          "Key usage limit reached.",
+    KEY_HWID_MISMATCH: "Key is locked to a different device.",
+  };
+  const msg  = msgs[code] || "Access denied.";
+  const kick = encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)");
+  const err  = encStr("[PubArmour] " + msg);
+  return `load(${kick})();error(${err},2)`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DATA HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+const META_FILE = path.join(__dirname, "meta.json");
+function readMeta()  { try { return JSON.parse(fs.readFileSync(META_FILE,"utf8")); } catch { return {}; } }
+function writeMeta(d){ fs.writeFileSync(META_FILE, JSON.stringify(d,null,2)); }
+
+function checkCommon(req, res) {
+  const ip = req.ip;
+  if (banned.has(ip))                              { fake404(res); return false; }
+  if (!checkRate(ip))                              { res.status(429).send("-- rate_limited"); return false; }
+  if (!validateUA(req.headers["user-agent"]||"")) { fake404(res); return false; }
+  const hwid = req.headers["x-hwid"];
+  if (!hwid || hwid.length < 6)                   { res.status(403).send("-- missing_hwid"); return false; }
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PUBLIC ENDPOINTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// STEP 1: /auth/:scriptname?key=PA-XXXX  → one-time token
+app.get("/auth/:name", (req, res) => {
+  if (!checkCommon(req, res)) return;
+
+  const hwid   = req.headers["x-hwid"];
+  const keyStr = req.query.key;
+  const ip     = req.ip;
+  const name   = (req.params.name||"").replace(/[^a-zA-Z0-9_-]/g,"");
+
+  res.setHeader("Content-Type","text/plain");
+  res.setHeader("Cache-Control","no-store");
+
+  if (!keyStr) return res.status(403).send(kickResponse("KEY_INVALID"));
+
+  const kv = validateKey(keyStr, hwid);
+  if (!kv.ok) {
+    console.warn(`[KEY FAIL] ${kv.code} key=${keyStr} ip=${ip}`);
+    return res.status(403).send(kickResponse(kv.code));
+  }
+
+  const scriptPath = path.join(SCRIPTS_DIR, name + ".lua");
+  if (!fs.existsSync(scriptPath)) return res.status(404).send("-- not_found");
+
+  const token = mintToken(name, hwid, ip);
+  res.send(token);
+});
+
+// STEP 2: /fetch/:token  → obfuscated protected script
+app.get("/fetch/:token", (req, res) => {
+  if (!checkCommon(req, res)) return;
+
+  const hwid   = req.headers["x-hwid"];
+  const ip     = req.ip;
+  const result = burnToken(req.params.token, hwid, ip);
+
+  res.setHeader("Content-Type","text/plain");
+  res.setHeader("Cache-Control","no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma","no-cache");
+  res.setHeader("Expires","0");
+
+  if (!result.ok) {
+    const kick = encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)");
+    return res.status(403).send(`load(${kick})();error("${result.reason}",2)`);
+  }
+
+  const name = result.scriptName;
+  const sp   = path.join(SCRIPTS_DIR, name + ".lua");
+  if (!fs.existsSync(sp)) return res.status(404).send("-- not_found");
+
+  const meta = readMeta();
+  if (!meta[name]) meta[name] = { executions: 0 };
+  meta[name].executions = (meta[name].executions||0) + 1;
+  meta[name].lastExec   = Date.now();
+  writeMeta(meta);
+
+  const raw     = fs.readFileSync(sp, "utf8");
+  const payload = buildPayload(raw, hwid, name);
+  res.send(payload);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ADMIN API
+// ══════════════════════════════════════════════════════════════════════════════
+function adminAuth(req, res, next) {
+  const pw = req.body?.password || req.headers["x-admin-password"];
+  if (pw !== UPLOAD_PASSWORD) return res.status(401).json({ error:"Wrong password" });
+  next();
+}
+
 app.get("/api/scripts", (req, res) => {
+  const meta  = readMeta();
   const files = fs.existsSync(SCRIPTS_DIR)
-    ? fs.readdirSync(SCRIPTS_DIR).filter((f) => f.endsWith(".lua"))
-    : [];
-  const scripts = files.map((f) => {
-    const name = f.replace(".lua", "");
-    const stat = fs.statSync(path.join(SCRIPTS_DIR, f));
-    const content = fs.readFileSync(path.join(SCRIPTS_DIR, f), "utf8");
-    return {
-      name,
-      size: stat.size,
-      lines: content.split("\n").length,
-      updated: stat.mtime,
-    };
+    ? fs.readdirSync(SCRIPTS_DIR).filter(f=>f.endsWith(".lua")) : [];
+  res.json(files.map(f => {
+    const name    = f.replace(".lua","");
+    const stat    = fs.statSync(path.join(SCRIPTS_DIR,f));
+    const content = fs.readFileSync(path.join(SCRIPTS_DIR,f),"utf8");
+    const m       = meta[name]||{};
+    return { name, size:stat.size, lines:content.split("\n").length,
+             updated:stat.mtime, executions:m.executions||0, description:m.description||"" };
+  }));
+});
+
+app.post("/api/upload", adminAuth, (req, res) => {
+  const { name, content, description } = req.body;
+  if (!name||!content) return res.status(400).json({ error:"Name and content required." });
+  const safe = name.replace(/[^a-zA-Z0-9_-]/g,"");
+  if (!safe) return res.status(400).json({ error:"Invalid name." });
+  const isNew = !fs.existsSync(path.join(SCRIPTS_DIR,safe+".lua"));
+  fs.writeFileSync(path.join(SCRIPTS_DIR,safe+".lua"), content,"utf8");
+  const meta = readMeta();
+  if (!meta[safe]) meta[safe] = { created:Date.now(), executions:0 };
+  if (description) meta[safe].description = description;
+  meta[safe].updated = Date.now();
+  writeMeta(meta);
+  res.json({ success:true, name:safe, isNew });
+});
+
+app.delete("/api/scripts/:name", adminAuth, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,"");
+  const p    = path.join(SCRIPTS_DIR,name+".lua");
+  if (!fs.existsSync(p)) return res.status(404).json({ error:"Not found." });
+  fs.unlinkSync(p);
+  const meta = readMeta(); delete meta[name]; writeMeta(meta);
+  res.json({ success:true });
+});
+
+app.post("/api/scripts/:name/content", adminAuth, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,"");
+  const p    = path.join(SCRIPTS_DIR,name+".lua");
+  if (!fs.existsSync(p)) return res.status(404).json({ error:"Not found." });
+  res.json({ content:fs.readFileSync(p,"utf8") });
+});
+
+app.post("/api/scripts/:name/reset-execs", adminAuth, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,"");
+  const meta = readMeta();
+  if (!meta[name]) return res.status(404).json({ error:"Not found." });
+  meta[name].executions = 0; writeMeta(meta);
+  res.json({ success:true });
+});
+
+app.post("/api/stats", adminAuth, (req, res) => {
+  const meta  = readMeta();
+  const files = fs.existsSync(SCRIPTS_DIR)
+    ? fs.readdirSync(SCRIPTS_DIR).filter(f=>f.endsWith(".lua")) : [];
+  const keys  = readKeys();
+  const now   = Date.now();
+  res.json({
+    scriptCount:     files.length,
+    totalExecutions: Object.values(meta).reduce((a,m)=>a+(m.executions||0),0),
+    totalSize:       files.reduce((a,f)=>a+fs.statSync(path.join(SCRIPTS_DIR,f)).size,0),
+    activeKeys:      Object.values(keys).filter(k=>k.active && now<k.expires).length,
+    totalKeys:       Object.keys(keys).length,
   });
-  res.json(scripts);
 });
 
-// ─── UPLOAD / UPDATE A SCRIPT ─────────────────────────────────────────────────
-app.post("/api/upload", (req, res) => {
-  const { password, name, content } = req.body;
-
-  if (password !== UPLOAD_PASSWORD) {
-    return res.status(401).json({ error: "Wrong password!" });
-  }
-  if (!name || !content) {
-    return res.status(400).json({ error: "Name and content are required." });
-  }
-
-  // Sanitize name: only allow letters, numbers, dashes, underscores
-  const safeName = name.replace(/[^a-zA-Z0-9_-]/g, "");
-  if (!safeName) {
-    return res.status(400).json({ error: "Invalid script name." });
-  }
-
-  const scriptPath = path.join(SCRIPTS_DIR, safeName + ".lua");
-  fs.writeFileSync(scriptPath, content, "utf8");
-
-  res.json({ success: true, name: safeName, url: `/raw/${safeName}` });
+// KEY CRUD
+app.post("/api/keys/generate", adminAuth, (req, res) => {
+  const { duration_hours, note, maxUses } = req.body;
+  if (!duration_hours||isNaN(duration_hours))
+    return res.status(400).json({ error:"duration_hours required" });
+  const keyStr  = "PA-" + crypto.randomBytes(10).toString("hex").toUpperCase();
+  const now     = Date.now();
+  const expires = now + duration_hours * 3_600_000;
+  const keys    = readKeys();
+  keys[keyStr]  = { active:true, created:now, expires, hwid:null, note:note||"", uses:0, maxUses:maxUses||null };
+  writeKeys(keys);
+  res.json({ key:keyStr, expires:new Date(expires).toISOString(), note:note||"" });
 });
 
-// ─── DELETE A SCRIPT ──────────────────────────────────────────────────────────
-app.delete("/api/scripts/:name", (req, res) => {
-  const { password } = req.body;
+app.post("/api/keys/revoke", adminAuth, (req, res) => {
+  const { key } = req.body;
+  const keys    = readKeys();
+  if (!keys[key]) return res.status(404).json({ error:"Key not found" });
+  keys[key].active = false; writeKeys(keys);
+  res.json({ success:true });
+});
 
-  if (password !== UPLOAD_PASSWORD) {
-    return res.status(401).json({ error: "Wrong password!" });
-  }
+app.post("/api/keys/reset-hwid", adminAuth, (req, res) => {
+  const { key } = req.body;
+  const keys    = readKeys();
+  if (!keys[key]) return res.status(404).json({ error:"Key not found" });
+  keys[key].hwid = null; writeKeys(keys);
+  res.json({ success:true });
+});
 
-  const scriptPath = path.join(SCRIPTS_DIR, req.params.name + ".lua");
-  if (!fs.existsSync(scriptPath)) {
-    return res.status(404).json({ error: "Script not found." });
-  }
+app.delete("/api/keys/delete", adminAuth, (req, res) => {
+  const { key } = req.body;
+  const keys    = readKeys();
+  if (!keys[key]) return res.status(404).json({ error:"Key not found" });
+  delete keys[key]; writeKeys(keys);
+  res.json({ success:true });
+});
 
-  fs.unlinkSync(scriptPath);
-  res.json({ success: true });
+app.get("/api/keys/list", (req, res) => {
+  const pw = req.headers["x-admin-password"];
+  if (pw !== UPLOAD_PASSWORD) return res.status(401).json({ error:"Unauthorized" });
+  const keys = readKeys();
+  const now  = Date.now();
+  res.json(Object.entries(keys).map(([k,v]) => ({
+    key:k, active:v.active && now<v.expires, revoked:!v.active, expired:now>v.expires,
+    hwid_bound:!!v.hwid, uses:v.uses||0, maxUses:v.maxUses||null,
+    expires:new Date(v.expires).toISOString(), note:v.note||""
+  })));
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 ScriptHost running at http://localhost:${PORT}`);
-  console.log(`📜 Raw scripts at: http://localhost:${PORT}/raw/<scriptname>`);
-  console.log(`🔑 Upload password: ${UPLOAD_PASSWORD}\n`);
+  console.log(`\n🛡️  PubArmour running → http://localhost:${PORT}\n`);
 });
