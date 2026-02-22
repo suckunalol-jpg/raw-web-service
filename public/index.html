@@ -1,245 +1,896 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ScriptHost</title>
+  <title>PubArmour</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #0f0f13;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', sans-serif;
+    :root {
+      --bg:       #020810;
+      --surface:  #050d1a;
+      --surface2: #071324;
+      --border:   #0a2040;
+      --border2:  #0d3060;
+      --b1:       #0077ff;
+      --b2:       #00d4ff;
+      --b3:       #004499;
+      --glow:     rgba(0,120,255,0.25);
+      --glow2:    rgba(0,212,255,0.15);
+      --text:     #c8deff;
+      --muted:    #2a4a7a;
+      --success:  #00ffaa;
+      --danger:   #ff3366;
+      --mono:     'Share Tech Mono', monospace;
+      --sans:     'Rajdhani', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    /* ── BINARY RAIN CANVAS ───────────────────────────────────── */
+    #matrix-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.18;
+      pointer-events: none;
+    }
+
+    /* ── GRADIENT OVERLAY ─────────────────────────────────────── */
+    .bg-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,100,255,0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 60% at 90% 90%, rgba(0,50,150,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 50% at 10% 80%, rgba(0,150,255,0.08) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* ── SCANLINES ────────────────────────────────────────────── */
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.07) 3px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* ── LAYOUT ───────────────────────────────────────────────── */
+    #app {
+      position: relative;
+      z-index: 10;
       min-height: 100vh;
-      padding: 30px 20px;
-    }
-    h1 { text-align: center; font-size: 2rem; color: #a78bfa; margin-bottom: 6px; }
-    .subtitle { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 30px; }
-    .container { max-width: 860px; margin: 0 auto; }
-
-    .card {
-      background: #1a1a24;
-      border: 1px solid #2a2a3a;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 24px;
-    }
-    .card h2 { font-size: 1rem; color: #a78bfa; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }
-
-    label { display: block; font-size: 0.82rem; color: #888; margin-bottom: 5px; }
-    input[type="text"], input[type="password"], textarea {
-      width: 100%;
-      background: #0f0f13;
-      border: 1px solid #2a2a3a;
-      border-radius: 8px;
-      color: #e0e0e0;
-      padding: 10px 12px;
-      font-size: 0.9rem;
-      margin-bottom: 14px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    input:focus, textarea:focus { border-color: #a78bfa; }
-    textarea { font-family: 'Courier New', monospace; resize: vertical; min-height: 160px; }
-
-    button {
-      background: #7c3aed;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 22px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: background 0.2s;
-    }
-    button:hover { background: #6d28d9; }
-    button.danger { background: #7f1d1d; }
-    button.danger:hover { background: #991b1b; }
-    button.copy-btn { background: #1e293b; font-size: 0.78rem; padding: 5px 12px; }
-    button.copy-btn:hover { background: #334155; }
-
-    .msg { margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; display: none; }
-    .msg.success { background: #14532d; color: #86efac; display: block; }
-    .msg.error   { background: #7f1d1d; color: #fca5a5; display: block; }
-
-    #script-list { display: flex; flex-direction: column; gap: 10px; }
-    .script-item {
-      background: #0f0f13;
-      border: 1px solid #2a2a3a;
-      border-radius: 8px;
-      padding: 14px 16px;
       display: flex;
       flex-direction: column;
+    }
+
+    /* ── HEADER ───────────────────────────────────────────────── */
+    header {
+      padding: 28px 44px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-shield {
+      width: 48px; height: 48px;
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .brand-shield svg {
+      width: 48px; height: 48px;
+      filter: drop-shadow(0 0 12px var(--b1));
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-name {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      line-height: 1;
+      background: linear-gradient(90deg, var(--b2) 0%, #4488ff 50%, var(--b1) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: none;
+    }
+
+    .brand-tag {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .header-pills {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--b2);
+      background: rgba(0,100,255,0.06);
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      padding: 5px 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.2s;
+    }
+    .pill .val { color: #fff; font-weight: 700; }
+    .pill .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 5px var(--success);
+    }
+
+    /* ── MAIN GRID ────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      max-width: 1160px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 28px 44px 60px;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 22px;
+      align-items: start;
+    }
+
+    /* ── CARDS ────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      transition: border-color 0.25s;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--b1), var(--b2), var(--b1), transparent);
+      opacity: 0.5;
+    }
+
+    .card:hover { border-color: var(--border2); }
+
+    .card-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--b2);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title::before {
+      content: '//';
+      color: var(--muted);
+    }
+
+    .card-body { padding: 20px; }
+
+    /* ── FORM ─────────────────────────────────────────────────── */
+    .field { margin-bottom: 13px; }
+
+    label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    input[type=text], input[type=password], textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      caret-color: var(--b2);
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--b1);
+      box-shadow: 0 0 0 3px rgba(0,120,255,0.1), 0 0 16px rgba(0,120,255,0.08);
+    }
+
+    textarea {
+      min-height: 170px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ── BUTTONS ──────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 9px 18px;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-transform: uppercase;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--b1), var(--b2));
+      color: var(--bg);
+      width: 100%;
+      margin-top: 14px;
+      box-shadow: 0 2px 20px rgba(0,120,255,0.25);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 28px rgba(0,120,255,0.4);
+    }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-sm { padding: 5px 12px; font-size: 0.65rem; border-radius: 6px; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--b1); color: var(--b2); }
+
+    .btn-danger {
+      background: rgba(255,51,102,0.08);
+      color: var(--danger);
+      border: 1px solid rgba(255,51,102,0.25);
+    }
+    .btn-danger:hover { background: rgba(255,51,102,0.15); border-color: var(--danger); }
+
+    .btn-copy {
+      background: rgba(0,120,255,0.08);
+      color: var(--b2);
+      border: 1px solid var(--border2);
+    }
+    .btn-copy:hover { background: rgba(0,120,255,0.15); }
+
+    /* ── MESSAGE ──────────────────────────────────────────────── */
+    .msg {
+      display: none;
+      margin-top: 11px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      line-height: 1.5;
+      word-break: break-all;
+    }
+    .msg.ok  { background: rgba(0,255,170,0.06); border: 1px solid rgba(0,255,170,0.2); color: var(--success); display: block; }
+    .msg.err { background: rgba(255,51,102,0.06); border: 1px solid rgba(255,51,102,0.2); color: var(--danger); display: block; }
+
+    /* ── RIGHT COLUMN ─────────────────────────────────────────── */
+    .right { display: flex; flex-direction: column; gap: 14px; }
+
+    .search-bar { display: flex; gap: 10px; }
+    .search-bar input { flex: 1; }
+
+    .scripts-list { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── SCRIPT CARD ──────────────────────────────────────────── */
+    .scard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+      animation: fadeUp 0.3s ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .scard::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--b1), var(--b2));
+      border-radius: 2px 0 0 2px;
+    }
+
+    .scard:hover { border-color: var(--border2); }
+
+    .scard-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .scard-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .scard-name .live {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 7px var(--success);
+      flex-shrink: 0;
+    }
+
+    .scard-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 2px;
+      font-weight: 400;
+    }
+
+    .scard-actions { display: flex; gap: 7px; flex-shrink: 0; }
+
+    .scard-meta {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 11px;
+    }
+
+    .mtag {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .mtag.hi { color: var(--b2); }
+    .mtag.shield { color: #4488ff; }
+
+    .loadstr-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .loadstr-box {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--b2);
+      word-break: break-all;
+      user-select: all;
+      line-height: 1.5;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 48px 20px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+    }
+
+    .empty .ico { font-size: 2.5rem; margin-bottom: 12px; }
+
+    /* ── MODAL ────────────────────────────────────────────────── */
+    .modal-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,4,15,0.85);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+    .modal-bg.open { display: flex; }
+
+    .modal {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      width: 680px;
+      max-width: 95vw;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(0,100,255,0.15);
+    }
+
+    .modal-hd {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-title {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--b2);
+    }
+
+    .modal-body {
+      padding: 22px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .modal-body textarea { min-height: 280px; }
+
+    .modal-ft {
+      padding: 14px 22px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
       gap: 10px;
     }
-    .script-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .script-name { font-weight: 600; color: #c4b5fd; font-size: 0.95rem; }
-    .script-meta { font-size: 0.75rem; color: #555; margin-top: 2px; }
-    .script-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
-    .loadstring-row { display: flex; gap: 8px; align-items: center; }
-    .url-box {
-      flex: 1;
-      background: #1a1a24;
-      border: 1px solid #2a2a3a;
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 0.78rem;
-      color: #a0a0b0;
-      word-break: break-all;
-      white-space: pre-wrap;
-      user-select: all;
+    .btn-save {
+      background: linear-gradient(135deg, var(--b1), var(--b2));
+      color: var(--bg);
+      padding: 9px 22px;
     }
+    .btn-save:hover { opacity: 0.85; }
 
-    .empty { color: #444; text-align: center; padding: 30px; font-size: 0.9rem; }
-    .row { display: flex; gap: 14px; }
-    .row > * { flex: 1; }
+    /* ── HWID badge ───────────────────────────────────────────── */
+    .hwid-count {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      background: rgba(0,100,255,0.1);
+      border: 1px solid var(--border2);
+      color: var(--b2);
+      border-radius: 10px;
+      padding: 2px 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .hwid-count:hover { background: rgba(0,100,255,0.2); }
+
+    /* ── SCROLLBAR ────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    @media (max-width: 820px) {
+      main { grid-template-columns: 1fr; padding: 16px 20px 40px; }
+      header { padding: 20px 20px 0; flex-direction: column; align-items: flex-start; }
+    }
   </style>
 </head>
 <body>
-<div class="container">
-  <h1>⚡ ScriptHost</h1>
-  <p class="subtitle">Your personal Lua script cloud</p>
 
-  <div class="card">
-    <h2>Upload Script</h2>
-    <div class="row">
-      <div>
-        <label>Script Name (no spaces)</label>
-        <input type="text" id="script-name" placeholder="e.g. myscript or esp_v2" />
+<!-- Binary rain -->
+<canvas id="matrix-canvas"></canvas>
+<div class="bg-overlay"></div>
+<div class="scanlines"></div>
+
+<div id="app">
+  <!-- HEADER -->
+  <header>
+    <div class="brand">
+      <div class="brand-shield">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M24 4L6 12V24C6 33.6 14.1 42.5 24 44C33.9 42.5 42 33.6 42 24V12L24 4Z"
+            fill="url(#sg)" stroke="url(#sb)" stroke-width="1.5"/>
+          <path d="M16 24l5 5 11-11" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <linearGradient id="sg" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#001a3d"/>
+              <stop offset="100%" stop-color="#00204d"/>
+            </linearGradient>
+            <linearGradient id="sb" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0077ff"/>
+              <stop offset="100%" stop-color="#00d4ff"/>
+            </linearGradient>
+          </defs>
+        </svg>
       </div>
-      <div>
-        <label>Upload Password</label>
-        <input type="password" id="password" placeholder="Your secret password" />
+      <div class="brand-text">
+        <div class="brand-name">PUBARMOUR</div>
+        <div class="brand-tag">Secure Script Hosting v2.0</div>
       </div>
     </div>
-    <label>Script Content (Lua)</label>
-    <textarea id="script-content" placeholder="-- paste your Lua script here"></textarea>
-    <button onclick="uploadScript()">Upload Script</button>
-    <div id="upload-msg" class="msg"></div>
-  </div>
+    <div class="header-pills">
+      <div class="pill"><span class="dot"></span> Status: <span class="val">ONLINE</span></div>
+      <div class="pill">Scripts: <span class="val" id="stat-scripts">—</span></div>
+      <div class="pill">Executions: <span class="val" id="stat-execs">—</span></div>
+      <div class="pill">Storage: <span class="val" id="stat-size">—</span></div>
+    </div>
+  </header>
 
-  <div class="card">
-    <h2>Your Scripts</h2>
-    <div id="script-list"><div class="empty">Loading...</div></div>
+  <main>
+    <!-- LEFT: Upload -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Upload Script</span>
+        </div>
+        <div class="card-body">
+          <div class="row2">
+            <div class="field">
+              <label>Script Name</label>
+              <input type="text" id="sc-name" placeholder="my_script" autocomplete="off"/>
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input type="password" id="sc-pw" placeholder="••••••••" autocomplete="off"/>
+            </div>
+          </div>
+          <div class="field">
+            <label>Description</label>
+            <input type="text" id="sc-desc" placeholder="Optional description"/>
+          </div>
+          <div class="field">
+            <label>Lua Content</label>
+            <textarea id="sc-content" placeholder="-- paste your Lua here..."></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="uploadScript()">⬆ &nbsp;Upload &amp; Protect</button>
+          <div id="upload-msg" class="msg"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Scripts list -->
+    <div class="right">
+      <div class="search-bar">
+        <input type="text" id="search" placeholder="Search scripts..." oninput="filterScripts()"/>
+        <button class="btn btn-ghost btn-sm" onclick="loadScripts()">↺ Refresh</button>
+      </div>
+      <div id="scripts-list" class="scripts-list">
+        <div class="empty"><div class="ico">🛡️</div>Loading protected scripts...</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-bg" id="edit-modal">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">Edit — <span id="modal-name-lbl"></span></span>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="modal-pw" placeholder="••••••••"/>
+      </div>
+      <div class="field">
+        <label>Lua Content</label>
+        <textarea id="modal-content"></textarea>
+      </div>
+      <div id="modal-msg" class="msg"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-save btn-sm" onclick="saveEdit()">💾 &nbsp;Save</button>
+    </div>
   </div>
 </div>
 
 <script>
-  const BASE = window.location.origin;
+// ── Binary rain ───────────────────────────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('matrix-canvas');
+  const ctx = canvas.getContext('2d');
+  let cols, drops;
 
-  // Store loadstrings by script name so copy buttons can access them safely
-  const loadstrings = {};
+  const chars = '01';
 
-  async function loadScripts() {
-    const res = await fetch('/api/scripts');
-    const scripts = await res.json();
-    const list = document.getElementById('script-list');
-
-    if (scripts.length === 0) {
-      list.innerHTML = '<div class="empty">No scripts yet. Upload one above!</div>';
-      return;
-    }
-
-    list.innerHTML = '';
-
-    scripts.forEach(s => {
-      const rawUrl = `${BASE}/raw/${s.name}`;
-      const loadstr = `loadstring(game:HttpGet("${rawUrl}"))()`;
-      loadstrings[s.name] = loadstr;
-
-      const item = document.createElement('div');
-      item.className = 'script-item';
-      item.innerHTML = `
-        <div class="script-top">
-          <div class="script-info">
-            <div class="script-name">📜 ${s.name}</div>
-            <div class="script-meta">${s.lines} lines · ${(s.size/1024).toFixed(1)}KB · ${new Date(s.updated).toLocaleDateString()}</div>
-          </div>
-          <div class="script-actions">
-            <button class="copy-btn" id="copy-${s.name}">Copy</button>
-            <button class="danger" id="del-${s.name}">Delete</button>
-          </div>
-        </div>
-        <div class="loadstring-row">
-          <div class="url-box" id="ls-${s.name}">${loadstr}</div>
-        </div>
-      `;
-      list.appendChild(item);
-
-      // Attach events via JS so no inline escaping issues
-      document.getElementById(`copy-${s.name}`).addEventListener('click', () => {
-        copyText(s.name);
-      });
-      document.getElementById(`del-${s.name}`).addEventListener('click', () => {
-        deleteScript(s.name);
-      });
-    });
+  function init() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const fs = 14;
+    cols = Math.floor(canvas.width / fs);
+    drops = Array(cols).fill(1).map(() => Math.random() * -canvas.height / fs);
   }
 
-  function copyText(name) {
-    const text = loadstrings[name];
-    navigator.clipboard.writeText(text).then(() => {
-      const btn = document.getElementById(`copy-${name}`);
-      btn.textContent = 'Copied!';
-      setTimeout(() => btn.textContent = 'Copy', 1500);
-    }).catch(() => {
-      // Fallback for older browsers
-      const box = document.getElementById(`ls-${name}`);
-      const range = document.createRange();
-      range.selectNode(box);
-      window.getSelection().removeAllRanges();
-      window.getSelection().addRange(range);
-      document.execCommand('copy');
-      window.getSelection().removeAllRanges();
-      const btn = document.getElementById(`copy-${name}`);
-      btn.textContent = 'Copied!';
-      setTimeout(() => btn.textContent = 'Copy', 1500);
-    });
-  }
+  function draw() {
+    ctx.fillStyle = 'rgba(2,8,16,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  async function uploadScript() {
-    const name = document.getElementById('script-name').value.trim();
-    const password = document.getElementById('password').value;
-    const content = document.getElementById('script-content').value;
-    const msg = document.getElementById('upload-msg');
+    const fs = 14;
+    for (let i = 0; i < cols; i++) {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      // Gradient: head is bright cyan, tail fades to deep blue
+      const y = drops[i] * fs;
+      const progress = (y / canvas.height);
+      const r = 0, g = Math.floor(80 + progress * 120), b = Math.floor(180 + progress * 75);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.font = fs + 'px "Share Tech Mono"';
+      ctx.fillText(ch, i * fs, y);
 
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, password, content })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      msg.className = 'msg success';
-      msg.textContent = `✅ Uploaded! Use: loadstring(game:HttpGet("${BASE}/raw/${data.name}"))()`;
-      document.getElementById('script-name').value = '';
-      document.getElementById('script-content').value = '';
-      loadScripts();
-    } else {
-      msg.className = 'msg error';
-      msg.textContent = '❌ ' + data.error;
+      if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i] += 0.4 + Math.random() * 0.2;
     }
   }
 
-  async function deleteScript(name) {
-    const password = document.getElementById('password').value;
-    if (!password) { alert('Enter your password first!'); return; }
-    if (!confirm(`Delete "${name}"?`)) return;
+  init();
+  setInterval(draw, 50);
+  window.addEventListener('resize', init);
+})();
 
-    const res = await fetch(`/api/scripts/${name}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
-    });
-    const data = await res.json();
-    if (data.success) loadScripts();
-    else alert('Error: ' + data.error);
+// ── App logic ─────────────────────────────────────────────────────────────────
+const BASE = window.location.origin;
+let allScripts = [];
+let editingScript = null;
+
+function fmt(bytes) {
+  if (bytes < 1024) return bytes + 'B';
+  return (bytes / 1024).toFixed(1) + 'KB';
+}
+
+function ago(d) {
+  const diff = Date.now() - new Date(d).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function getPW() { return document.getElementById('sc-pw').value; }
+
+async function loadStats(pw) {
+  if (!pw) return;
+  try {
+    const r = await fetch('/api/stats', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password:pw}) });
+    const d = await r.json();
+    if (d.error) return;
+    document.getElementById('stat-scripts').textContent = d.scriptCount;
+    document.getElementById('stat-execs').textContent = d.totalExecutions.toLocaleString();
+    document.getElementById('stat-size').textContent = fmt(d.totalSize);
+  } catch {}
+}
+
+async function loadScripts() {
+  try {
+    const r = await fetch('/api/scripts');
+    allScripts = await r.json();
+    renderScripts(allScripts);
+    loadStats(getPW());
+  } catch {
+    document.getElementById('scripts-list').innerHTML = '<div class="empty"><div class="ico">⚠️</div>Failed to load.</div>';
   }
+}
 
-  loadScripts();
+function filterScripts() {
+  const q = document.getElementById('search').value.toLowerCase();
+  renderScripts(allScripts.filter(s => s.name.toLowerCase().includes(q) || (s.description||'').toLowerCase().includes(q)));
+}
+
+function renderScripts(scripts) {
+  const list = document.getElementById('scripts-list');
+  if (!scripts.length) {
+    list.innerHTML = '<div class="empty"><div class="ico">🛡️</div>No scripts yet.</div>';
+    return;
+  }
+  list.innerHTML = '';
+
+  scripts.forEach((s, i) => {
+    const authUrl = `${BASE}/auth/${s.name}`;
+    const loadstr = `loadstring(game:HttpGet("${authUrl}"))()`;
+
+    const el = document.createElement('div');
+    el.className = 'scard';
+    el.style.animationDelay = (i * 0.04) + 's';
+    el.innerHTML = `
+      <div class="scard-top">
+        <div>
+          <div class="scard-name"><span class="live"></span>${s.name}
+            <span class="hwid-count" title="HWIDs bound — click to reset" id="hwid-${s.name}"
+              onclick="resetHWID('${s.name}')">🔒 ${s.hwids.length} HWID${s.hwids.length !== 1 ? 's' : ''}</span>
+          </div>
+          ${s.description ? `<div class="scard-desc">${s.description}</div>` : ''}
+        </div>
+        <div class="scard-actions">
+          <button class="btn btn-ghost btn-sm" id="edit-${s.name}">✏️</button>
+          <button class="btn btn-danger btn-sm" id="del-${s.name}">🗑️</button>
+        </div>
+      </div>
+      <div class="scard-meta">
+        <span class="mtag">📄 ${s.lines} lines</span>
+        <span class="mtag">💾 ${fmt(s.size)}</span>
+        <span class="mtag hi">▶ ${s.executions} runs</span>
+        <span class="mtag shield">🛡️ Obfuscated</span>
+        <span class="mtag">🕐 ${ago(s.updated)}</span>
+      </div>
+      <div class="loadstr-wrap">
+        <div class="loadstr-box" id="ls-${s.name}">${loadstr}</div>
+        <button class="btn btn-copy btn-sm" id="copy-${s.name}">⎘</button>
+      </div>
+    `;
+    list.appendChild(el);
+
+    document.getElementById(`copy-${s.name}`).addEventListener('click', () => {
+      navigator.clipboard.writeText(loadstr).then(() => {
+        const b = document.getElementById(`copy-${s.name}`);
+        b.textContent = '✓';
+        setTimeout(() => b.textContent = '⎘', 1500);
+      });
+    });
+    document.getElementById(`del-${s.name}`).addEventListener('click', () => deleteScript(s.name));
+    document.getElementById(`edit-${s.name}`).addEventListener('click', () => openEdit(s.name));
+  });
+}
+
+async function uploadScript() {
+  const name = document.getElementById('sc-name').value.trim();
+  const password = getPW();
+  const content = document.getElementById('sc-content').value;
+  const description = document.getElementById('sc-desc').value.trim();
+  const msg = document.getElementById('upload-msg');
+  msg.className = 'msg';
+
+  const r = await fetch('/api/upload', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ password, name, content, description })
+  });
+  const d = await r.json();
+
+  if (d.success) {
+    msg.className = 'msg ok';
+    msg.textContent = `✅ Uploaded! ${BASE}/auth/${d.name}`;
+    document.getElementById('sc-name').value = '';
+    document.getElementById('sc-content').value = '';
+    document.getElementById('sc-desc').value = '';
+    loadScripts();
+  } else {
+    msg.className = 'msg err';
+    msg.textContent = '❌ ' + d.error;
+  }
+}
+
+async function deleteScript(name) {
+  const pw = getPW();
+  if (!pw) { alert('Enter your password first.'); return; }
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const r = await fetch(`/api/scripts/${name}`, {
+    method: 'DELETE', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ password: pw })
+  });
+  const d = await r.json();
+  if (d.success) loadScripts();
+  else alert('Error: ' + d.error);
+}
+
+async function resetHWID(name) {
+  const pw = getPW();
+  if (!pw) { alert('Enter your password first.'); return; }
+  if (!confirm(`Reset all HWIDs for "${name}"? Users will need to re-bind.`)) return;
+  const r = await fetch(`/api/scripts/${name}/reset-hwid`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ password: pw })
+  });
+  const d = await r.json();
+  if (d.success) { alert('✅ HWIDs reset!'); loadScripts(); }
+  else alert('Error: ' + d.error);
+}
+
+async function openEdit(name) {
+  const pw = getPW();
+  if (!pw) { alert('Enter your password first.'); return; }
+  const r = await fetch(`/api/scripts/${name}/content`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ password: pw })
+  });
+  const d = await r.json();
+  if (d.error) { alert('Error: ' + d.error); return; }
+  editingScript = name;
+  document.getElementById('modal-name-lbl').textContent = name;
+  document.getElementById('modal-content').value = d.content;
+  document.getElementById('modal-pw').value = pw;
+  document.getElementById('modal-msg').className = 'msg';
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editingScript = null;
+}
+
+async function saveEdit() {
+  const pw = document.getElementById('modal-pw').value;
+  const content = document.getElementById('modal-content').value;
+  const msg = document.getElementById('modal-msg');
+  const r = await fetch('/api/upload', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ password: pw, name: editingScript, content })
+  });
+  const d = await r.json();
+  if (d.success) {
+    msg.className = 'msg ok'; msg.textContent = '✅ Saved!';
+    setTimeout(() => { closeModal(); loadScripts(); }, 700);
+  } else {
+    msg.className = 'msg err'; msg.textContent = '❌ ' + d.error;
+  }
+}
+
+document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === document.getElementById('edit-modal')) closeModal(); });
+document.getElementById('sc-pw').addEventListener('change', () => loadStats(getPW()));
+
+loadScripts();
 </script>
 </body>
 </html>
