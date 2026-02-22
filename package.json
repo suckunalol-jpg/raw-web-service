@@ -1,0 +1,24 @@
+{
+  "name": "pubarmour",
+  "version": "2.0.0",
+  "description": "PubArmour - Roblox script protection & key system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "bot": "node bot.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0",
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "ISC"
+}
