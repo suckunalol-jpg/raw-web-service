@@ -130,7 +130,7 @@ function statusEmoji(k) {
 // ── Interaction handler ──────────────────────────────────────────────────────
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
   if (!hasPerm(interaction.member)) return interaction.editReply({ embeds: [denied()] });
 
   const cmd = interaction.commandName;
