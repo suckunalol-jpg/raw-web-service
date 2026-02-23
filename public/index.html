@@ -21,512 +21,193 @@
       --muted:    #2a4a7a;
       --success:  #00ffaa;
       --danger:   #ff3366;
+      --warn:     #ffaa00;
       --mono:     'Share Tech Mono', monospace;
       --sans:     'Rajdhani', sans-serif;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow-x: hidden; }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      overflow-x: hidden;
-    }
-
-    /* ── BINARY RAIN CANVAS ───────────────────────────────────── */
-    #matrix-canvas {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      opacity: 0.18;
-      pointer-events: none;
-    }
-
-    /* ── GRADIENT OVERLAY ─────────────────────────────────────── */
+    #matrix-canvas { position: fixed; inset: 0; z-index: 0; opacity: 0.18; pointer-events: none; }
     .bg-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 1;
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
       background:
         radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,100,255,0.18) 0%, transparent 70%),
         radial-gradient(ellipse 60% 60% at 90% 90%, rgba(0,50,150,0.12) 0%, transparent 60%),
         radial-gradient(ellipse 50% 50% at 10% 80%, rgba(0,150,255,0.08) 0%, transparent 60%);
-      pointer-events: none;
     }
-
-    /* ── SCANLINES ────────────────────────────────────────────── */
     .scanlines {
-      position: fixed;
-      inset: 0;
-      z-index: 2;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 3px,
-        rgba(0,0,0,0.07) 3px,
-        rgba(0,0,0,0.07) 4px
-      );
-      pointer-events: none;
+      position: fixed; inset: 0; z-index: 2; pointer-events: none;
+      background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.07) 3px, rgba(0,0,0,0.07) 4px);
     }
 
-    /* ── LAYOUT ───────────────────────────────────────────────── */
-    #app {
-      position: relative;
-      z-index: 10;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
+    #app { position: relative; z-index: 10; min-height: 100vh; display: flex; flex-direction: column; }
 
-    /* ── HEADER ───────────────────────────────────────────────── */
-    header {
-      padding: 28px 44px 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .brand-shield {
-      width: 48px; height: 48px;
-      position: relative;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    .brand-shield svg {
-      width: 48px; height: 48px;
-      filter: drop-shadow(0 0 12px var(--b1));
-    }
-
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-    }
-
+    /* ── HEADER ── */
+    header { padding: 28px 44px 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-shield { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+    .brand-shield svg { width: 48px; height: 48px; filter: drop-shadow(0 0 12px var(--b1)); }
+    .brand-text { display: flex; flex-direction: column; }
     .brand-name {
-      font-size: 1.8rem;
-      font-weight: 700;
-      letter-spacing: 2px;
-      line-height: 1;
+      font-size: 1.8rem; font-weight: 700; letter-spacing: 2px; line-height: 1;
       background: linear-gradient(90deg, var(--b2) 0%, #4488ff 50%, var(--b1) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: none;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-
-    .brand-tag {
-      font-family: var(--mono);
-      font-size: 0.6rem;
-      color: var(--muted);
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      margin-top: 2px;
-    }
-
-    .header-pills {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
+    .brand-tag { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-top: 2px; }
+    .header-pills { display: flex; gap: 12px; flex-wrap: wrap; }
     .pill {
-      font-family: var(--mono);
-      font-size: 0.68rem;
-      color: var(--b2);
-      background: rgba(0,100,255,0.06);
-      border: 1px solid var(--border2);
-      border-radius: 20px;
-      padding: 5px 14px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: border-color 0.2s;
+      font-family: var(--mono); font-size: 0.68rem; color: var(--b2);
+      background: rgba(0,100,255,0.06); border: 1px solid var(--border2);
+      border-radius: 20px; padding: 5px 14px; display: flex; align-items: center; gap: 6px;
     }
     .pill .val { color: #fff; font-weight: 700; }
-    .pill .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 5px var(--success);
-    }
+    .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 5px var(--success); }
 
-    /* ── MAIN GRID ────────────────────────────────────────────── */
+    /* ── MAIN ── */
     main {
-      flex: 1;
-      max-width: 1160px;
-      margin: 0 auto;
-      width: 100%;
+      flex: 1; max-width: 1160px; margin: 0 auto; width: 100%;
       padding: 28px 44px 60px;
-      display: grid;
-      grid-template-columns: 380px 1fr;
-      gap: 22px;
-      align-items: start;
+      display: grid; grid-template-columns: 400px 1fr; gap: 22px; align-items: start;
     }
 
-    /* ── CARDS ────────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      position: relative;
-      transition: border-color 0.25s;
-    }
-
+    /* ── CARDS ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative; transition: border-color 0.25s; }
     .card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--b1), var(--b2), var(--b1), transparent);
-      opacity: 0.5;
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--b1), var(--b2), var(--b1), transparent); opacity: 0.5;
     }
-
     .card:hover { border-color: var(--border2); }
-
-    .card-header {
-      padding: 14px 20px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .card-title {
-      font-family: var(--mono);
-      font-size: 0.68rem;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      color: var(--b2);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .card-title::before {
-      content: '//';
-      color: var(--muted);
-    }
-
+    .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .card-title { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 3px; text-transform: uppercase; color: var(--b2); display: flex; align-items: center; gap: 8px; }
+    .card-title::before { content: '//'; color: var(--muted); }
     .card-body { padding: 20px; }
 
-    /* ── FORM ─────────────────────────────────────────────────── */
+    /* ── FORM ── */
     .field { margin-bottom: 13px; }
-
-    label {
-      display: block;
-      font-family: var(--mono);
-      font-size: 0.62rem;
-      color: var(--muted);
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin-bottom: 5px;
-    }
-
+    label { display: block; font-family: var(--mono); font-size: 0.62rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; }
     input[type=text], input[type=password], textarea {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      padding: 9px 12px;
-      font-family: var(--mono);
-      font-size: 0.78rem;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      caret-color: var(--b2);
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); padding: 9px 12px; font-family: var(--mono); font-size: 0.78rem;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s; caret-color: var(--b2);
     }
-
-    input:focus, textarea:focus {
-      border-color: var(--b1);
-      box-shadow: 0 0 0 3px rgba(0,120,255,0.1), 0 0 16px rgba(0,120,255,0.08);
-    }
-
-    textarea {
-      min-height: 170px;
-      resize: vertical;
-      line-height: 1.55;
-    }
-
+    input:focus, textarea:focus { border-color: var(--b1); box-shadow: 0 0 0 3px rgba(0,120,255,0.1), 0 0 16px rgba(0,120,255,0.08); }
+    textarea { min-height: 170px; resize: vertical; line-height: 1.55; }
     .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    /* ── BUTTONS ──────────────────────────────────────────────── */
+    /* ── TOGGLE ── */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 13px; cursor: pointer; user-select: none;
+      transition: border-color 0.2s;
+    }
+    .toggle-row:hover { border-color: var(--border2); }
+    .toggle-row.active { border-color: var(--warn); background: rgba(255,170,0,0.04); }
+    .toggle-label { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .toggle-row.active .toggle-label { color: var(--warn); }
+    .toggle-switch {
+      width: 34px; height: 18px; background: var(--border2); border-radius: 9px;
+      position: relative; transition: background 0.2s; flex-shrink: 0;
+    }
+    .toggle-switch::after {
+      content: ''; position: absolute; top: 3px; left: 3px;
+      width: 12px; height: 12px; border-radius: 50%; background: var(--muted);
+      transition: transform 0.2s, background 0.2s;
+    }
+    .toggle-row.active .toggle-switch { background: rgba(255,170,0,0.3); }
+    .toggle-row.active .toggle-switch::after { transform: translateX(16px); background: var(--warn); }
+
+    /* ── BUTTONS ── */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      padding: 9px 18px;
-      border: none;
-      border-radius: 8px;
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 1px;
-      cursor: pointer;
-      transition: all 0.15s;
-      text-transform: uppercase;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 9px 18px; border: none; border-radius: 8px; font-family: var(--mono);
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 1px; cursor: pointer;
+      transition: all 0.15s; text-transform: uppercase;
     }
-
-    .btn-primary {
-      background: linear-gradient(135deg, var(--b1), var(--b2));
-      color: var(--bg);
-      width: 100%;
-      margin-top: 14px;
-      box-shadow: 0 2px 20px rgba(0,120,255,0.25);
-    }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 28px rgba(0,120,255,0.4);
-    }
+    .btn-primary { background: linear-gradient(135deg, var(--b1), var(--b2)); color: var(--bg); width: 100%; margin-top: 14px; box-shadow: 0 2px 20px rgba(0,120,255,0.25); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 28px rgba(0,120,255,0.4); }
     .btn-primary:active { transform: translateY(0); }
-
     .btn-sm { padding: 5px 12px; font-size: 0.65rem; border-radius: 6px; }
-
-    .btn-ghost {
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--border);
-    }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
     .btn-ghost:hover { border-color: var(--b1); color: var(--b2); }
-
-    .btn-danger {
-      background: rgba(255,51,102,0.08);
-      color: var(--danger);
-      border: 1px solid rgba(255,51,102,0.25);
-    }
+    .btn-danger { background: rgba(255,51,102,0.08); color: var(--danger); border: 1px solid rgba(255,51,102,0.25); }
     .btn-danger:hover { background: rgba(255,51,102,0.15); border-color: var(--danger); }
-
-    .btn-copy {
-      background: rgba(0,120,255,0.08);
-      color: var(--b2);
-      border: 1px solid var(--border2);
-    }
+    .btn-copy { background: rgba(0,120,255,0.08); color: var(--b2); border: 1px solid var(--border2); }
     .btn-copy:hover { background: rgba(0,120,255,0.15); }
 
-    /* ── MESSAGE ──────────────────────────────────────────────── */
-    .msg {
-      display: none;
-      margin-top: 11px;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      line-height: 1.5;
-      word-break: break-all;
-    }
+    /* ── MSG ── */
+    .msg { display: none; margin-top: 11px; padding: 10px 14px; border-radius: 8px; font-family: var(--mono); font-size: 0.72rem; line-height: 1.5; word-break: break-all; }
     .msg.ok  { background: rgba(0,255,170,0.06); border: 1px solid rgba(0,255,170,0.2); color: var(--success); display: block; }
     .msg.err { background: rgba(255,51,102,0.06); border: 1px solid rgba(255,51,102,0.2); color: var(--danger); display: block; }
 
-    /* ── RIGHT COLUMN ─────────────────────────────────────────── */
+    /* ── RIGHT ── */
     .right { display: flex; flex-direction: column; gap: 14px; }
-
     .search-bar { display: flex; gap: 10px; }
     .search-bar input { flex: 1; }
-
     .scripts-list { display: flex; flex-direction: column; gap: 10px; }
 
-    /* ── SCRIPT CARD ──────────────────────────────────────────── */
+    /* ── SCRIPT CARD ── */
     .scard {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px 18px;
-      position: relative;
-      overflow: hidden;
-      transition: border-color 0.2s;
-      animation: fadeUp 0.3s ease both;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px; position: relative; overflow: hidden;
+      transition: border-color 0.2s; animation: fadeUp 0.3s ease both;
     }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .scard::before {
-      content: '';
-      position: absolute;
-      left: 0; top: 0; bottom: 0;
-      width: 3px;
-      background: linear-gradient(180deg, var(--b1), var(--b2));
-      border-radius: 2px 0 0 2px;
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: linear-gradient(180deg, var(--b1), var(--b2)); border-radius: 2px 0 0 2px;
     }
-
+    .scard.no-obf::before { background: linear-gradient(180deg, var(--warn), #ff6600); }
     .scard:hover { border-color: var(--border2); }
 
-    .scard-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-
-    .scard-name {
-      font-size: 1rem;
-      font-weight: 700;
-      color: #fff;
-      letter-spacing: 0.5px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .scard-name .live {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 7px var(--success);
-      flex-shrink: 0;
-    }
-
-    .scard-desc {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-top: 2px;
-      font-weight: 400;
-    }
-
+    .scard-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .scard-name { font-size: 1rem; font-weight: 700; color: #fff; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+    .scard-name .live { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 7px var(--success); flex-shrink: 0; }
+    .scard-desc { font-size: 0.78rem; color: var(--muted); margin-top: 2px; font-weight: 400; }
     .scard-actions { display: flex; gap: 7px; flex-shrink: 0; }
 
-    .scard-meta {
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-      margin-bottom: 11px;
-    }
-
-    .mtag {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
+    .scard-meta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 11px; }
+    .mtag { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
     .mtag.hi { color: var(--b2); }
     .mtag.shield { color: #4488ff; }
+    .mtag.raw { color: var(--warn); }
 
-    .loadstr-wrap {
-      display: flex;
-      gap: 8px;
-      align-items: stretch;
-    }
-
+    /* ── LOADSTRING BLOCK ── */
+    .loadstr-section { margin-top: 4px; }
+    .loadstr-label { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; }
+    .loadstr-wrap { display: flex; gap: 8px; align-items: stretch; }
     .loadstr-box {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 8px 12px;
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: var(--b2);
-      word-break: break-all;
-      user-select: all;
-      line-height: 1.5;
+      flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+      padding: 10px 14px; font-family: var(--mono); font-size: 0.7rem; color: var(--b2);
+      word-break: break-all; user-select: all; line-height: 1.8; white-space: pre;
     }
+    .loadstr-box .key-line { color: var(--success); }
+    .loadstr-box .ls-line  { color: var(--b2); }
 
-    .empty {
-      text-align: center;
-      padding: 48px 20px;
-      font-family: var(--mono);
-      font-size: 0.78rem;
-      color: var(--muted);
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-    }
-
+    .empty { text-align: center; padding: 48px 20px; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); border: 1px dashed var(--border); border-radius: 12px; }
     .empty .ico { font-size: 2.5rem; margin-bottom: 12px; }
 
-    /* ── MODAL ────────────────────────────────────────────────── */
-    .modal-bg {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,4,15,0.85);
-      z-index: 200;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(3px);
-    }
+    /* ── MODAL ── */
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,4,15,0.85); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
     .modal-bg.open { display: flex; }
-
     .modal {
-      background: var(--surface2);
-      border: 1px solid var(--border2);
-      border-radius: 16px;
-      width: 680px;
-      max-width: 95vw;
-      max-height: 88vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      box-shadow: 0 0 60px rgba(0,100,255,0.15);
+      background: var(--surface2); border: 1px solid var(--border2); border-radius: 16px;
+      width: 680px; max-width: 95vw; max-height: 88vh; display: flex; flex-direction: column;
+      overflow: hidden; box-shadow: 0 0 60px rgba(0,100,255,0.15);
     }
-
-    .modal-hd {
-      padding: 16px 22px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .modal-title {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--b2);
-    }
-
-    .modal-body {
-      padding: 22px;
-      flex: 1;
-      overflow-y: auto;
-    }
-
+    .modal-hd { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-title { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: var(--b2); }
+    .modal-body { padding: 22px; flex: 1; overflow-y: auto; }
     .modal-body textarea { min-height: 280px; }
-
-    .modal-ft {
-      padding: 14px 22px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-
-    .btn-save {
-      background: linear-gradient(135deg, var(--b1), var(--b2));
-      color: var(--bg);
-      padding: 9px 22px;
-    }
+    .modal-ft { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+    .btn-save { background: linear-gradient(135deg, var(--b1), var(--b2)); color: var(--bg); padding: 9px 22px; }
     .btn-save:hover { opacity: 0.85; }
 
-    /* ── HWID badge ───────────────────────────────────────────── */
-    .hwid-count {
-      font-family: var(--mono);
-      font-size: 0.62rem;
-      background: rgba(0,100,255,0.1);
-      border: 1px solid var(--border2);
-      color: var(--b2);
-      border-radius: 10px;
-      padding: 2px 8px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
+    .hwid-count { font-family: var(--mono); font-size: 0.62rem; background: rgba(0,100,255,0.1); border: 1px solid var(--border2); color: var(--b2); border-radius: 10px; padding: 2px 8px; cursor: pointer; transition: background 0.2s; }
     .hwid-count:hover { background: rgba(0,100,255,0.2); }
 
-    /* ── SCROLLBAR ────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -539,29 +220,20 @@
 </head>
 <body>
 
-<!-- Binary rain -->
 <canvas id="matrix-canvas"></canvas>
 <div class="bg-overlay"></div>
 <div class="scanlines"></div>
 
 <div id="app">
-  <!-- HEADER -->
   <header>
     <div class="brand">
       <div class="brand-shield">
         <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M24 4L6 12V24C6 33.6 14.1 42.5 24 44C33.9 42.5 42 33.6 42 24V12L24 4Z"
-            fill="url(#sg)" stroke="url(#sb)" stroke-width="1.5"/>
+          <path d="M24 4L6 12V24C6 33.6 14.1 42.5 24 44C33.9 42.5 42 33.6 42 24V12L24 4Z" fill="url(#sg)" stroke="url(#sb)" stroke-width="1.5"/>
           <path d="M16 24l5 5 11-11" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           <defs>
-            <linearGradient id="sg" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#001a3d"/>
-              <stop offset="100%" stop-color="#00204d"/>
-            </linearGradient>
-            <linearGradient id="sb" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#0077ff"/>
-              <stop offset="100%" stop-color="#00d4ff"/>
-            </linearGradient>
+            <linearGradient id="sg" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#001a3d"/><stop offset="100%" stop-color="#00204d"/></linearGradient>
+            <linearGradient id="sb" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#0077ff"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient>
           </defs>
         </svg>
       </div>
@@ -604,6 +276,13 @@
             <label>Lua Content</label>
             <textarea id="sc-content" placeholder="-- paste your Lua here..."></textarea>
           </div>
+
+          <!-- Skip Obfuscation Toggle -->
+          <div class="toggle-row" id="obf-toggle" onclick="toggleObf()">
+            <span class="toggle-label">⚠️ &nbsp;Script already obfuscated — skip re-obfuscation</span>
+            <div class="toggle-switch"></div>
+          </div>
+
           <button class="btn btn-primary" onclick="uploadScript()">⬆ &nbsp;Upload &amp; Protect</button>
           <div id="upload-msg" class="msg"></div>
         </div>
@@ -654,9 +333,7 @@
   const canvas = document.getElementById('matrix-canvas');
   const ctx = canvas.getContext('2d');
   let cols, drops;
-
   const chars = '01';
-
   function init() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -664,36 +341,36 @@
     cols = Math.floor(canvas.width / fs);
     drops = Array(cols).fill(1).map(() => Math.random() * -canvas.height / fs);
   }
-
   function draw() {
     ctx.fillStyle = 'rgba(2,8,16,0.05)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     const fs = 14;
     for (let i = 0; i < cols; i++) {
       const ch = chars[Math.floor(Math.random() * chars.length)];
-      // Gradient: head is bright cyan, tail fades to deep blue
       const y = drops[i] * fs;
-      const progress = (y / canvas.height);
-      const r = 0, g = Math.floor(80 + progress * 120), b = Math.floor(180 + progress * 75);
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const progress = y / canvas.height;
+      ctx.fillStyle = `rgb(0,${Math.floor(80+progress*120)},${Math.floor(180+progress*75)})`;
       ctx.font = fs + 'px "Share Tech Mono"';
       ctx.fillText(ch, i * fs, y);
-
       if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
       drops[i] += 0.4 + Math.random() * 0.2;
     }
   }
-
   init();
   setInterval(draw, 50);
   window.addEventListener('resize', init);
 })();
 
-// ── App logic ─────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 const BASE = window.location.origin;
 let allScripts = [];
 let editingScript = null;
+let skipObfuscation = false;
+
+function toggleObf() {
+  skipObfuscation = !skipObfuscation;
+  document.getElementById('obf-toggle').classList.toggle('active', skipObfuscation);
+}
 
 function fmt(bytes) {
   if (bytes < 1024) return bytes + 'B';
@@ -712,6 +389,7 @@ function ago(d) {
 
 function getPW() { return document.getElementById('sc-pw').value; }
 
+// ── Stats ─────────────────────────────────────────────────────────────────────
 async function loadStats(pw) {
   if (!pw) return;
   try {
@@ -724,6 +402,7 @@ async function loadStats(pw) {
   } catch {}
 }
 
+// ── Scripts ───────────────────────────────────────────────────────────────────
 async function loadScripts() {
   try {
     const r = await fetch('/api/scripts');
@@ -749,18 +428,22 @@ function renderScripts(scripts) {
   list.innerHTML = '';
 
   scripts.forEach((s, i) => {
-    const authUrl = `${BASE}/auth/${s.name}`;
-    const loadstr = `loadstring(game:HttpGet("${authUrl}"))()`;
+    const authUrl  = `${BASE}/auth/${s.name}`;
+    // Key-based loadstring format
+    const keyLine  = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"`;
+    const lsLine   = `loadstring(game:HttpGet("${authUrl}?key="..Pub_key))()`;
+    const fullText = `${keyLine}\n${lsLine}`;
+
+    const isRaw    = s.skipObfuscation === true;
 
     const el = document.createElement('div');
-    el.className = 'scard';
+    el.className = 'scard' + (isRaw ? ' no-obf' : '');
     el.style.animationDelay = (i * 0.04) + 's';
     el.innerHTML = `
       <div class="scard-top">
         <div>
-          <div class="scard-name"><span class="live"></span>${s.name}
-            <span class="hwid-count" title="HWIDs bound — click to reset" id="hwid-${s.name}"
-              onclick="resetHWID('${s.name}')">🔒 ${s.hwids.length} HWID${s.hwids.length !== 1 ? 's' : ''}</span>
+          <div class="scard-name">
+            <span class="live"></span>${s.name}
           </div>
           ${s.description ? `<div class="scard-desc">${s.description}</div>` : ''}
         </div>
@@ -773,48 +456,60 @@ function renderScripts(scripts) {
         <span class="mtag">📄 ${s.lines} lines</span>
         <span class="mtag">💾 ${fmt(s.size)}</span>
         <span class="mtag hi">▶ ${s.executions} runs</span>
-        <span class="mtag shield">🛡️ Obfuscated</span>
+        <span class="mtag ${isRaw ? 'raw' : 'shield'}">${isRaw ? '⚠️ Raw (no obf)' : '🛡️ Obfuscated'}</span>
         <span class="mtag">🕐 ${ago(s.updated)}</span>
       </div>
-      <div class="loadstr-wrap">
-        <div class="loadstr-box" id="ls-${s.name}">${loadstr}</div>
-        <button class="btn btn-copy btn-sm" id="copy-${s.name}">⎘</button>
+      <div class="loadstr-section">
+        <div class="loadstr-label">Loader (replace key)</div>
+        <div class="loadstr-wrap">
+          <div class="loadstr-box" id="ls-${s.name}"><span class="key-line">${keyLine}</span>
+<span class="ls-line">${lsLine}</span></div>
+          <button class="btn btn-copy btn-sm" id="copy-${s.name}" title="Copy loader">⎘</button>
+        </div>
       </div>
     `;
     list.appendChild(el);
 
     document.getElementById(`copy-${s.name}`).addEventListener('click', () => {
-      navigator.clipboard.writeText(loadstr).then(() => {
+      navigator.clipboard.writeText(fullText).then(() => {
         const b = document.getElementById(`copy-${s.name}`);
         b.textContent = '✓';
         setTimeout(() => b.textContent = '⎘', 1500);
       });
     });
+
     document.getElementById(`del-${s.name}`).addEventListener('click', () => deleteScript(s.name));
     document.getElementById(`edit-${s.name}`).addEventListener('click', () => openEdit(s.name));
   });
 }
 
+// ── Upload ────────────────────────────────────────────────────────────────────
 async function uploadScript() {
-  const name = document.getElementById('sc-name').value.trim();
-  const password = getPW();
-  const content = document.getElementById('sc-content').value;
+  const name        = document.getElementById('sc-name').value.trim();
+  const password    = getPW();
+  const content     = document.getElementById('sc-content').value;
   const description = document.getElementById('sc-desc').value.trim();
-  const msg = document.getElementById('upload-msg');
+  const msg         = document.getElementById('upload-msg');
   msg.className = 'msg';
+
+  if (!name)     { msg.className = 'msg err'; msg.textContent = '❌ Script name required.'; return; }
+  if (!password) { msg.className = 'msg err'; msg.textContent = '❌ Password required.'; return; }
+  if (!content)  { msg.className = 'msg err'; msg.textContent = '❌ Script content required.'; return; }
 
   const r = await fetch('/api/upload', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ password, name, content, description })
+    body: JSON.stringify({ password, name, content, description, skipObfuscation })
   });
   const d = await r.json();
 
   if (d.success) {
     msg.className = 'msg ok';
-    msg.textContent = `✅ Uploaded! ${BASE}/auth/${d.name}`;
+    msg.textContent = `✅ ${d.isNew ? 'Uploaded' : 'Updated'}: ${name}${skipObfuscation ? ' (obfuscation skipped)' : ' (obfuscated)'}`;
     document.getElementById('sc-name').value = '';
     document.getElementById('sc-content').value = '';
     document.getElementById('sc-desc').value = '';
+    skipObfuscation = false;
+    document.getElementById('obf-toggle').classList.remove('active');
     loadScripts();
   } else {
     msg.className = 'msg err';
@@ -822,6 +517,7 @@ async function uploadScript() {
   }
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
 async function deleteScript(name) {
   const pw = getPW();
   if (!pw) { alert('Enter your password first.'); return; }
@@ -835,19 +531,7 @@ async function deleteScript(name) {
   else alert('Error: ' + d.error);
 }
 
-async function resetHWID(name) {
-  const pw = getPW();
-  if (!pw) { alert('Enter your password first.'); return; }
-  if (!confirm(`Reset all HWIDs for "${name}"? Users will need to re-bind.`)) return;
-  const r = await fetch(`/api/scripts/${name}/reset-hwid`, {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ password: pw })
-  });
-  const d = await r.json();
-  if (d.success) { alert('✅ HWIDs reset!'); loadScripts(); }
-  else alert('Error: ' + d.error);
-}
-
+// ── Edit modal ────────────────────────────────────────────────────────────────
 async function openEdit(name) {
   const pw = getPW();
   if (!pw) { alert('Enter your password first.'); return; }
@@ -871,9 +555,9 @@ function closeModal() {
 }
 
 async function saveEdit() {
-  const pw = document.getElementById('modal-pw').value;
+  const pw      = document.getElementById('modal-pw').value;
   const content = document.getElementById('modal-content').value;
-  const msg = document.getElementById('modal-msg');
+  const msg     = document.getElementById('modal-msg');
   const r = await fetch('/api/upload', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ password: pw, name: editingScript, content })
@@ -887,7 +571,9 @@ async function saveEdit() {
   }
 }
 
-document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === document.getElementById('edit-modal')) closeModal(); });
+document.getElementById('edit-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('edit-modal')) closeModal();
+});
 document.getElementById('sc-pw').addEventListener('change', () => loadStats(getPW()));
 
 loadScripts();
