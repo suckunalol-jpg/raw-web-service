@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require("uuid");
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const SCRIPTS_DIR    = path.join(__dirname, "scripts");
+const SCRIPTS_DIR     = path.join(__dirname, "scripts");
 const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || "spaxisgay";
 
 app.set("trust proxy", 1);
@@ -129,21 +129,14 @@ function xorEncode(src, key) {
 function buildPayload(src, hwid, scriptName) {
   const key   = (Math.floor(Math.random() * 180) + 30) | 0;
   const enc   = xorEncode(src, key);
-  // Split encoded array into multiple chunks (harder to reconstruct)
   const chunkSize = 120;
   const chunks = [];
   for (let i = 0; i < enc.length; i += chunkSize) {
     chunks.push("{" + enc.slice(i, i + chunkSize).join(",") + "}");
   }
   const chunkVars = chunks.map((c, i) => { const v = r4(); return { v, def: `local ${v}=${c}` }; });
-
-  // Random var names every request
   const [vK,vH,vD,vF,vG,vT,vC,vR,vB,vN,vS,vX] = Array.from({length:12}, r4);
-
   const eHWID = encStr(hwid);
-  const eKick = encStr("pcall(function()game:GetService(\"TeleportService\"):Teleport(0)end)");
-
-  // Build chunk concatenation
   const joinExpr = chunkVars.map(cv => cv.v).join(",");
 
   return `-- PubArmour Protected
@@ -155,9 +148,7 @@ local ${vG}=loadstring or load
 local ${vK}=${key}
 local ${vH}=${eHWID}
 local ${vN}=game and game.GetService
--- ANTI-CONTEXT: must be real Roblox
 if not ${vN} then error("ctx",2) end
--- ANTI-TIMING: reject debugger pauses / slow env
 local _t0=${vT}()
 ${chunkVars.map(cv=>cv.def).join("\n")}
 local ${vD}={}
@@ -171,12 +162,10 @@ if (_t1-_t0)>3 then
   load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] Timing violation.")},2) return
 end
--- ANTI-DUMP: verify loadstring not hooked
 if type(${vG})~="function" or type(${vG}("return 1"))~="function" then
   load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] Integrity check failed.")},2) return
 end
--- HWID RE-CHECK at runtime
 local _hw,_hok
 _hok=pcall(function() _hw=tostring(game:GetService("RbxAnalyticsService"):GetClientId()) end)
 if not _hok or not _hw or _hw=="" then
@@ -186,7 +175,6 @@ if _hw~=${vH} then
   load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] HWID mismatch.")},2) return
 end
--- EXECUTE
 local ${vF}=${vR}(${vD})
 local _fn,_er=${vG}(${vF})
 if not _fn then
@@ -194,6 +182,27 @@ if not _fn then
   error(tostring(_er),2)
 end
 return _fn()`.trim();
+}
+
+// ── Raw payload wrapper (already-obfuscated scripts) ─────────────────────────
+// Wraps with HWID check + key validation but does NOT re-obfuscate the content
+function buildRawPayload(src, hwid) {
+  const [vH, vN, vHW, vOK] = Array.from({length:4}, r4);
+  const eHWID = encStr(hwid);
+  return `-- PubArmour Protected (pre-obfuscated)
+local ${vN}=game and game.GetService
+if not ${vN} then error("ctx",2) end
+local ${vH}=${eHWID}
+local ${vHW},${vOK}
+${vOK}=pcall(function() ${vHW}=tostring(game:GetService("RbxAnalyticsService"):GetClientId()) end)
+if not ${vOK} or not ${vHW} or ${vHW}=="" then
+  ${vHW}=tostring(game:GetService("Players").LocalPlayer.UserId)
+end
+if ${vHW}~=${vH} then
+  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  error(${encStr("[PubArmour] HWID mismatch.")},2) return
+end
+${src}`.trim();
 }
 
 function kickResponse(code) {
@@ -258,7 +267,7 @@ app.get("/auth/:name", (req, res) => {
   res.send(token);
 });
 
-// STEP 2: /fetch/:token  → obfuscated protected script
+// STEP 2: /fetch/:token  → protected script
 app.get("/fetch/:token", (req, res) => {
   if (!checkCommon(req, res)) return;
 
@@ -287,7 +296,11 @@ app.get("/fetch/:token", (req, res) => {
   writeMeta(meta);
 
   const raw     = fs.readFileSync(sp, "utf8");
-  const payload = buildPayload(raw, hwid, name);
+  // Use raw wrapper if script was uploaded as already-obfuscated
+  const payload = meta[name].skipObfuscation
+    ? buildRawPayload(raw, hwid)
+    : buildPayload(raw, hwid, name);
+
   res.send(payload);
 });
 
@@ -309,13 +322,20 @@ app.get("/api/scripts", (req, res) => {
     const stat    = fs.statSync(path.join(SCRIPTS_DIR,f));
     const content = fs.readFileSync(path.join(SCRIPTS_DIR,f),"utf8");
     const m       = meta[name]||{};
-    return { name, size:stat.size, lines:content.split("\n").length,
-             updated:stat.mtime, executions:m.executions||0, description:m.description||"" };
+    return {
+      name,
+      size:            stat.size,
+      lines:           content.split("\n").length,
+      updated:         stat.mtime,
+      executions:      m.executions||0,
+      description:     m.description||"",
+      skipObfuscation: m.skipObfuscation||false,   // ← exposed to frontend
+    };
   }));
 });
 
 app.post("/api/upload", adminAuth, (req, res) => {
-  const { name, content, description } = req.body;
+  const { name, content, description, skipObfuscation } = req.body;
   if (!name||!content) return res.status(400).json({ error:"Name and content required." });
   const safe = name.replace(/[^a-zA-Z0-9_-]/g,"");
   if (!safe) return res.status(400).json({ error:"Invalid name." });
@@ -323,7 +343,8 @@ app.post("/api/upload", adminAuth, (req, res) => {
   fs.writeFileSync(path.join(SCRIPTS_DIR,safe+".lua"), content,"utf8");
   const meta = readMeta();
   if (!meta[safe]) meta[safe] = { created:Date.now(), executions:0 };
-  if (description) meta[safe].description = description;
+  if (description !== undefined) meta[safe].description = description;
+  meta[safe].skipObfuscation = skipObfuscation === true;  // ← stored in meta
   meta[safe].updated = Date.now();
   writeMeta(meta);
   res.json({ success:true, name:safe, isNew });
