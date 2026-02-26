@@ -13,7 +13,14 @@ app.set("trust proxy", 1);
 if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  STATIC FILES — MUST come BEFORE honeypots so index.html actually loads
+// ══════════════════════════════════════════════════════════════════════════════
 app.use(express.static(path.join(__dirname, "public")));
+
+// Health check
+app.get("/health", (_req, res) => res.json({ status: "ok", uptime: process.uptime() }));
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  LAYER 1 — UA WHITELIST / BROWSER BLOCKLIST
@@ -134,8 +141,8 @@ function buildPayload(src, hwid, scriptName) {
   for (let i = 0; i < enc.length; i += chunkSize) {
     chunks.push("{" + enc.slice(i, i + chunkSize).join(",") + "}");
   }
-  const chunkVars = chunks.map((c, i) => { const v = r4(); return { v, def: `local ${v}=${c}` }; });
-  const [vK,vH,vD,vF,vG,vT,vC,vR,vB,vN,vS,vX] = Array.from({length:12}, r4);
+  const chunkVars = chunks.map((c) => { const v = r4(); return { v, def: `local ${v}=${c}` }; });
+  const [vK,vH,vD,vF,vG,vT,vC,vR,vB,vN] = Array.from({length:10}, r4);
   const eHWID = encStr(hwid);
   const joinExpr = chunkVars.map(cv => cv.v).join(",");
 
@@ -184,8 +191,6 @@ end
 return _fn()`.trim();
 }
 
-// ── Raw payload wrapper (already-obfuscated scripts) ─────────────────────────
-// Wraps with HWID check + key validation but does NOT re-obfuscate the content
 function buildRawPayload(src, hwid) {
   const [vH, vN, vHW, vOK] = Array.from({length:4}, r4);
   const eHWID = encStr(hwid);
@@ -237,10 +242,9 @@ function checkCommon(req, res) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  PUBLIC ENDPOINTS
+//  PUBLIC ENDPOINTS (executor-facing)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// STEP 1: /auth/:scriptname?key=PA-XXXX  → one-time token
 app.get("/auth/:name", (req, res) => {
   if (!checkCommon(req, res)) return;
 
@@ -267,7 +271,6 @@ app.get("/auth/:name", (req, res) => {
   res.send(token);
 });
 
-// STEP 2: /fetch/:token  → protected script
 app.get("/fetch/:token", (req, res) => {
   if (!checkCommon(req, res)) return;
 
@@ -296,7 +299,6 @@ app.get("/fetch/:token", (req, res) => {
   writeMeta(meta);
 
   const raw     = fs.readFileSync(sp, "utf8");
-  // Use raw wrapper if script was uploaded as already-obfuscated
   const payload = meta[name].skipObfuscation
     ? buildRawPayload(raw, hwid)
     : buildPayload(raw, hwid, name);
@@ -329,7 +331,7 @@ app.get("/api/scripts", (req, res) => {
       updated:         stat.mtime,
       executions:      m.executions||0,
       description:     m.description||"",
-      skipObfuscation: m.skipObfuscation||false,   // ← exposed to frontend
+      skipObfuscation: m.skipObfuscation||false,
     };
   }));
 });
@@ -344,7 +346,7 @@ app.post("/api/upload", adminAuth, (req, res) => {
   const meta = readMeta();
   if (!meta[safe]) meta[safe] = { created:Date.now(), executions:0 };
   if (description !== undefined) meta[safe].description = description;
-  meta[safe].skipObfuscation = skipObfuscation === true;  // ← stored in meta
+  meta[safe].skipObfuscation = skipObfuscation === true;
   meta[safe].updated = Date.now();
   writeMeta(meta);
   res.json({ success:true, name:safe, isNew });
@@ -389,7 +391,7 @@ app.post("/api/stats", adminAuth, (req, res) => {
   });
 });
 
-// KEY CRUD
+// ── KEY CRUD ─────────────────────────────────────────────────────────────────
 app.post("/api/keys/generate", adminAuth, (req, res) => {
   const { duration_hours, note, maxUses } = req.body;
   if (!duration_hours||isNaN(duration_hours))
@@ -437,6 +439,15 @@ app.get("/api/keys/list", (req, res) => {
     hwid_bound:!!v.hwid, uses:v.uses||0, maxUses:v.maxUses||null,
     expires:new Date(v.expires).toISOString(), note:v.note||""
   })));
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CATCH-ALL — serve index.html for unknown GET routes (SPA fallback)
+// ══════════════════════════════════════════════════════════════════════════════
+app.get("*", (req, res) => {
+  const indexPath = path.join(__dirname, "public", "index.html");
+  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  res.status(404).send("Not found");
 });
 
 app.listen(PORT, () => {
