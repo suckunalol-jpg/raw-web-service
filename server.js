@@ -405,6 +405,26 @@ app.post("/api/keys/generate", adminAuth, (req, res) => {
   res.json({ key:keyStr, expires:new Date(expires).toISOString(), note:note||"" });
 });
 
+app.post("/api/keys/generate-batch", adminAuth, (req, res) => {
+  const { duration_hours, note, maxUses, count } = req.body;
+  if (!duration_hours || isNaN(duration_hours))
+    return res.status(400).json({ error: "duration_hours required" });
+  const num = parseInt(count) || 1;
+  if (num < 1 || num > 50)
+    return res.status(400).json({ error: "count must be between 1 and 50" });
+  const now     = Date.now();
+  const expires = now + duration_hours * 3_600_000;
+  const keys    = readKeys();
+  const generated = [];
+  for (let i = 0; i < num; i++) {
+    const keyStr = "PA-" + crypto.randomBytes(10).toString("hex").toUpperCase();
+    keys[keyStr] = { active: true, created: now, expires, hwid: null, note: note || "", uses: 0, maxUses: maxUses || null };
+    generated.push({ key: keyStr, expires: new Date(expires).toISOString() });
+  }
+  writeKeys(keys);
+  res.json({ keys: generated, note: note || "" });
+});
+
 app.post("/api/keys/revoke", adminAuth, (req, res) => {
   const { key } = req.body;
   const keys    = readKeys();
