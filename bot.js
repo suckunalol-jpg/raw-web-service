@@ -11,6 +11,8 @@ const CLIENT_ID       = process.env.DISCORD_CLIENT_ID;
 const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || "spaxisgay";
 const API_URL         = process.env.API_URL || "http://localhost:3000";
 const ALLOWED_ROLES   = (process.env.ALLOWED_ROLES || "").split(",").filter(Boolean);
+const ADMIN_ROLES     = (process.env.ADMIN_ROLES || "").split(",").filter(Boolean);
+const HWID_RESET_ENABLED = (process.env.HWID_RESET_ENABLED || "true") === "true";
 
 if (!TOKEN)     { console.error("❌ DISCORD_TOKEN is not set!"); process.exit(1); }
 if (!CLIENT_ID) { console.error("❌ DISCORD_CLIENT_ID is not set!"); process.exit(1); }
@@ -61,10 +63,21 @@ async function registerCommands() {
   console.log("✅ PubArmour commands registered");
 }
 
-function hasPerm(member) {
-  if (!ALLOWED_ROLES.length) return false;
-  return member.roles.cache.some(r => ALLOWED_ROLES.includes(r.id));
+function isAdmin(member) {
+  if (ADMIN_ROLES.length) return member.roles.cache.some(r => ADMIN_ROLES.includes(r.id));
+  // Fallback: if no ADMIN_ROLES set, ALLOWED_ROLES act as admin
+  if (ALLOWED_ROLES.length) return member.roles.cache.some(r => ALLOWED_ROLES.includes(r.id));
+  return false;
 }
+
+function hasPerm(member) {
+  if (isAdmin(member)) return true;
+  if (ALLOWED_ROLES.length) return member.roles.cache.some(r => ALLOWED_ROLES.includes(r.id));
+  return false;
+}
+
+// Actions whitelisted (non-admin) users can use on the panel
+const WHITELIST_ACTIONS = new Set(["stats", "copyloader", "resethwid"]);
 
 function ah() {
   return { "Content-Type": "application/json", "x-admin-password": UPLOAD_PASSWORD };
@@ -104,21 +117,23 @@ function buildPanelEmbed(scriptName, s) {
 }
 
 function buildPanelRows(scriptName) {
+  // Admin row — full management controls
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`pa_genkey_${scriptName}`).setLabel("Generate Key").setStyle(ButtonStyle.Success).setEmoji("🔑"),
-    new ButtonBuilder().setCustomId(`pa_revokekey_${scriptName}`).setLabel("Revoke Key").setStyle(ButtonStyle.Danger).setEmoji("🚫"),
-    new ButtonBuilder().setCustomId(`pa_resethwid_${scriptName}`).setLabel("Reset HWID").setStyle(ButtonStyle.Secondary).setEmoji("🔓"),
-    new ButtonBuilder().setCustomId(`pa_deletekey_${scriptName}`).setLabel("Delete Key").setStyle(ButtonStyle.Danger).setEmoji("🗑️"),
+    new ButtonBuilder().setCustomId(`pa_genkey_${scriptName}`).setLabel("Generate Keys").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_revokekey_${scriptName}`).setLabel("Revoke Key").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_deletekey_${scriptName}`).setLabel("Delete Key").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_listkeys_${scriptName}`).setLabel("List Keys").setStyle(ButtonStyle.Primary),
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`pa_listkeys_${scriptName}`).setLabel("List Keys").setStyle(ButtonStyle.Primary).setEmoji("📋"),
-    new ButtonBuilder().setCustomId(`pa_stats_${scriptName}`).setLabel("Stats").setStyle(ButtonStyle.Primary).setEmoji("📊"),
-    new ButtonBuilder().setCustomId(`pa_resetexecs_${scriptName}`).setLabel("Reset Execs").setStyle(ButtonStyle.Secondary).setEmoji("🔄"),
-    new ButtonBuilder().setCustomId(`pa_copyloader_${scriptName}`).setLabel("Copy Loader").setStyle(ButtonStyle.Secondary).setEmoji("📎"),
+    new ButtonBuilder().setCustomId(`pa_checkkey_${scriptName}`).setLabel("Check Key").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_resetexecs_${scriptName}`).setLabel("Reset Execs").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_refresh_${scriptName}`).setLabel("Refresh Panel").setStyle(ButtonStyle.Primary),
   );
+  // Whitelisted user row — stats, get loader, reset hwid
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`pa_checkkey_${scriptName}`).setLabel("Check Key").setStyle(ButtonStyle.Primary).setEmoji("🔍"),
-    new ButtonBuilder().setCustomId(`pa_refresh_${scriptName}`).setLabel("Refresh Panel").setStyle(ButtonStyle.Secondary).setEmoji("↺"),
+    new ButtonBuilder().setCustomId(`pa_stats_${scriptName}`).setLabel("Stats").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_copyloader_${scriptName}`).setLabel("Get Loader").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`pa_resethwid_${scriptName}`).setLabel("Reset HWID").setStyle(ButtonStyle.Primary),
   );
   return [row1, row2, row3];
 }
@@ -130,10 +145,16 @@ client.on("interactionCreate", async interaction => {
 
   // ── SLASH COMMANDS ─────────────────────────────────────────────────────────
   if (interaction.isChatInputCommand()) {
-    await interaction.deferReply();
-    if (!hasPerm(interaction.member)) return interaction.editReply({ embeds: [denied()] });
-
     const cmd = interaction.commandName;
+
+    try {
+      await interaction.deferReply();
+    } catch (err) {
+      console.error(`Failed to defer /${cmd}:`, err);
+      return;
+    }
+
+    if (!hasPerm(interaction.member)) return interaction.editReply({ embeds: [denied()] });
 
     try {
       if (cmd === "panel") {
@@ -210,20 +231,29 @@ client.on("interactionCreate", async interaction => {
   if (interaction.isButton()) {
     const id = interaction.customId;
     if (!id.startsWith("pa_")) return;
-    if (!hasPerm(interaction.member)) return interaction.reply({ embeds: [denied()], ephemeral: true });
 
     const parts      = id.split("_");
     const action     = parts[1];
     const scriptName = parts.slice(2).join("_");
 
+    // Permission check: whitelisted users can only use stats, get loader, reset hwid
+    if (!hasPerm(interaction.member)) {
+      return interaction.reply({ embeds: [denied()], ephemeral: true });
+    }
+    // Non-admin users can only use whitelisted actions
+    if (!isAdmin(interaction.member) && !WHITELIST_ACTIONS.has(action)) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setColor(C.err).setTitle("🔒 Admin Only").setDescription("This action requires admin permissions.").setFooter({ text: "PubArmour" })], ephemeral: true });
+    }
+
     try {
       // Buttons that open modals (can't defer before showModal)
       if (action === "genkey") {
-        const modal = new ModalBuilder().setCustomId(`pm_genkey_${scriptName}`).setTitle("Generate Key");
+        const modal = new ModalBuilder().setCustomId(`pm_genkey_${scriptName}`).setTitle("Generate Keys");
         modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("count").setLabel("Number of keys to generate").setStyle(TextInputStyle.Short).setPlaceholder("1").setRequired(true)),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("hours").setLabel("Duration (hours)").setStyle(TextInputStyle.Short).setPlaceholder("24").setRequired(true)),
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("note").setLabel("Note (e.g. username)").setStyle(TextInputStyle.Short).setPlaceholder("optional").setRequired(false)),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("maxuses").setLabel("Max uses (blank = unlimited)").setStyle(TextInputStyle.Short).setPlaceholder("").setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("maxuses").setLabel("Max uses per key (blank = unlimited)").setStyle(TextInputStyle.Short).setPlaceholder("").setRequired(false)),
         );
         return interaction.showModal(modal);
       }
@@ -235,6 +265,10 @@ client.on("interactionCreate", async interaction => {
       }
 
       if (action === "resethwid") {
+        // Check if HWID reset is enabled by admin
+        if (!HWID_RESET_ENABLED && !isAdmin(interaction.member)) {
+          return interaction.reply({ embeds: [new EmbedBuilder().setColor(C.err).setTitle("🔒 HWID Reset Disabled").setDescription("An admin has disabled HWID resets. Contact an admin to enable it.").setFooter({ text: "PubArmour" })], ephemeral: true });
+        }
         const modal = new ModalBuilder().setCustomId(`pm_resethwid_${scriptName}`).setTitle("Reset HWID");
         modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("key").setLabel("Key to reset HWID for").setStyle(TextInputStyle.Short).setPlaceholder("PA-...").setRequired(true)));
         return interaction.showModal(modal);
@@ -259,19 +293,19 @@ client.on("interactionCreate", async interaction => {
         const list = await res.json();
         if (!list.length) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.info).setDescription("No keys found.")] });
         const rows = list.slice(0, 25).map((k, i) =>
-          `\`${String(i+1).padStart(2,"0")}\` \`${k.key}\` ${statusEmoji(k)} | HWID: ${k.hwid_bound ? "🔒" : "🔓"} | Uses: ${k.uses}${k.maxUses ? "/"+k.maxUses : ""} | Exp: ${k.expires.slice(0,10)}${k.note ? " | "+k.note : ""}`
+          `\`${String(i+1).padStart(2,"0")}\` \`${k.key}\` ${statusEmoji(k)} | HWID: ${k.hwid_bound ? "Bound" : "Unbound"} | Uses: ${k.uses}${k.maxUses ? "/"+k.maxUses : ""} | Exp: ${k.expires.slice(0,10)}${k.note ? " | "+k.note : ""}`
         ).join("\n");
-        return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.info).setTitle(`🔑 Keys (${list.length})`).setDescription(rows.slice(0, 4000))] });
+        return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.info).setTitle(`Keys (${list.length})`).setDescription(rows.slice(0, 4000))] });
       }
 
       if (action === "stats") {
         await interaction.deferReply({ ephemeral: true });
         const res  = await fetch(`${API_URL}/api/stats`, { method: "POST", headers: ah(), body: JSON.stringify({ password: UPLOAD_PASSWORD }) });
         const data = await res.json();
-        if (data.error) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("❌ " + data.error)] });
+        if (data.error) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("Error: " + data.error)] });
         const size = data.totalSize < 1024 ? data.totalSize+"B" : (data.totalSize/1024).toFixed(1)+"KB";
         return interaction.editReply({ embeds: [
-          new EmbedBuilder().setColor(C.ok).setTitle("📊 PubArmour Statistics")
+          new EmbedBuilder().setColor(C.ok).setTitle("PubArmour Statistics")
             .addFields(
               { name: "Scripts",     value: String(data.scriptCount),              inline: true },
               { name: "Executions",  value: data.totalExecutions.toLocaleString(), inline: true },
@@ -287,14 +321,26 @@ client.on("interactionCreate", async interaction => {
         const res  = await fetch(`${API_URL}/api/scripts/${scriptName}/reset-execs`, { method: "POST", headers: ah(), body: JSON.stringify({ password: UPLOAD_PASSWORD }) });
         const data = await res.json();
         return interaction.editReply({ embeds: [new EmbedBuilder().setColor(data.success ? C.ok : C.err)
-          .setDescription(data.success ? `✅ Exec counter reset for \`${scriptName}\`.` : "❌ " + data.error)] });
+          .setDescription(data.success ? `Exec counter reset for \`${scriptName}\`.` : "Error: " + data.error)] });
       }
 
       if (action === "copyloader") {
-        const loader = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"\nloadstring(game:HttpGet("${API_URL}/auth/${scriptName}?key="..Pub_key))()`;
-        return interaction.reply({
-          embeds: [new EmbedBuilder().setColor(C.info).setTitle(`📎 Loader for ${scriptName}`).setDescription(`\`\`\`lua\n${loader}\n\`\`\``)],
-          ephemeral: true
+        // For whitelisted users: auto-fill their key if they have one
+        await interaction.deferReply({ ephemeral: true });
+        let userKey = "PA-XXXXXXXXXXXXXXXXXXXX";
+        try {
+          const res = await fetch(`${API_URL}/api/keys/list`, { headers: { "x-admin-password": UPLOAD_PASSWORD } });
+          const keys = await res.json();
+          // Find a key with a note matching the user's tag or ID
+          const userId = interaction.user.id;
+          const userTag = interaction.user.tag;
+          const match = keys.find(k => k.active && (k.note === userId || k.note === userTag || k.note.includes(interaction.user.username)));
+          if (match) userKey = match.key;
+        } catch {}
+        const loader = `Pub_key = "${userKey}"\nloadstring(game:HttpGet("${API_URL}/auth/${scriptName}?key="..Pub_key))()`;
+        return interaction.editReply({
+          embeds: [new EmbedBuilder().setColor(C.info).setTitle(`Loader for ${scriptName}`).setDescription(`\`\`\`lua\n${loader}\n\`\`\``)
+            .setFooter({ text: userKey !== "PA-XXXXXXXXXXXXXXXXXXXX" ? "Your key was auto-filled from your note." : "Replace the key with your own PA- key." })],
         });
       }
 
@@ -302,14 +348,20 @@ client.on("interactionCreate", async interaction => {
         await interaction.deferUpdate();
         const list = await (await fetch(`${API_URL}/api/scripts`)).json();
         const s    = list.find(x => x.name === scriptName);
-        if (!s) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription(`❌ \`${scriptName}\` no longer exists.`)], components: [] });
+        if (!s) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription(`\`${scriptName}\` no longer exists.`)], components: [] });
         return interaction.editReply({ embeds: [buildPanelEmbed(scriptName, s)], components: buildPanelRows(scriptName) });
       }
 
     } catch (err) {
-      console.error(`❌ Button [${action}]:`, err);
-      if (!interaction.replied && !interaction.deferred) return interaction.reply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription(`❌ ${err.message}`)], ephemeral: true });
-      return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription(`❌ ${err.message}`)] });
+      console.error(`Button [${action}] error:`, err);
+      try {
+        if (!interaction.replied && !interaction.deferred) {
+          return interaction.reply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription(`Error: ${err.message}`)], ephemeral: true });
+        }
+        return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription(`Error: ${err.message}`)] });
+      } catch (e2) {
+        console.error("Failed to send button error response:", e2);
+      }
     }
   }
 
@@ -321,34 +373,43 @@ client.on("interactionCreate", async interaction => {
     if (!id.startsWith("pm_")) return;
     if (!hasPerm(interaction.member)) return interaction.reply({ embeds: [denied()], ephemeral: true });
 
-    await interaction.deferReply({ ephemeral: true });
-
     const withoutPrefix = id.slice(3); // remove "pm_"
     const firstUnderscore = withoutPrefix.indexOf("_");
     const action     = withoutPrefix.slice(0, firstUnderscore);
     const scriptName = withoutPrefix.slice(firstUnderscore + 1);
 
+    // Non-admin users can only submit whitelisted modals (resethwid)
+    if (!isAdmin(interaction.member) && !WHITELIST_ACTIONS.has(action)) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setColor(C.err).setTitle("Admin Only").setDescription("This action requires admin permissions.").setFooter({ text: "PubArmour" })], ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
     try {
       if (action === "genkey") {
+        const countRaw = interaction.fields.getTextInputValue("count");
+        const count   = parseInt(countRaw) || 1;
         const hours   = parseInt(interaction.fields.getTextInputValue("hours"));
         const note    = interaction.fields.getTextInputValue("note") || "";
         const maxRaw  = interaction.fields.getTextInputValue("maxuses");
         const maxUses = maxRaw ? parseInt(maxRaw) : null;
-        if (isNaN(hours) || hours < 1) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("❌ Hours must be ≥ 1.")] });
+        if (isNaN(hours) || hours < 1) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("Hours must be >= 1.")] });
+        if (count < 1 || count > 50) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("Count must be between 1 and 50.")] });
 
-        const res  = await fetch(`${API_URL}/api/keys/generate`, { method: "POST", headers: ah(), body: JSON.stringify({ password: UPLOAD_PASSWORD, duration_hours: hours, note, maxUses }) });
+        const res  = await fetch(`${API_URL}/api/keys/generate-batch`, { method: "POST", headers: ah(), body: JSON.stringify({ password: UPLOAD_PASSWORD, duration_hours: hours, note, maxUses, count }) });
         const data = await res.json();
-        if (data.error) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("❌ " + data.error)] });
-        return interaction.editReply({ embeds: [
-          new EmbedBuilder().setColor(C.ok).setTitle("🔑 Key Generated")
-            .addFields(
-              { name: "Key",      value: `\`${data.key}\`` },
-              { name: "Duration", value: `${hours}h`, inline: true },
-              { name: "Max Uses", value: maxUses ? String(maxUses) : "∞", inline: true },
-              { name: "Expires",  value: data.expires },
-              { name: "Note",     value: note || "—" }
-            )
-        ]});
+        if (data.error) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("Error: " + data.error)] });
+
+        const keyList = data.keys.map(k => `\`${k.key}\``).join("\n");
+        const embed = new EmbedBuilder().setColor(C.ok).setTitle(`${data.keys.length} Key(s) Generated`)
+          .addFields(
+            { name: "Keys",     value: keyList.slice(0, 1024) },
+            { name: "Duration", value: `${hours}h`, inline: true },
+            { name: "Max Uses", value: maxUses ? String(maxUses) : "Unlimited", inline: true },
+            { name: "Expires",  value: data.keys[0].expires },
+            { name: "Note",     value: note || "None" }
+          );
+        return interaction.editReply({ embeds: [embed] });
       }
 
       if (action === "revokekey") {
@@ -403,7 +464,7 @@ client.on("interactionCreate", async interaction => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  STARTUP
 // ══════════════════════════════════════════════════════════════════════════════
-client.once("ready", () => console.log(`🛡️ PubArmour bot ready: ${client.user.tag}`));
+client.once("clientReady", () => console.log(`PubArmour bot ready: ${client.user.tag}`));
 client.on("error", err => console.error("❌ Discord client error:", err));
 process.on("unhandledRejection", err => console.error("❌ Unhandled rejection:", err));
 
