@@ -462,6 +462,55 @@ app.get("/api/keys/list", (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  EXECUTOR-FRIENDLY LOAD ENDPOINT (no UA/header requirements)
+//  GET /load/:name?key=PA-...&hwid=HWID_VALUE
+//  Designed for game:HttpGet() which cannot set custom headers
+// ══════════════════════════════════════════════════════════════════════════════
+app.get("/load/:name", (req, res) => {
+  res.setHeader("Content-Type", "text/plain");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+
+  const ip     = req.ip;
+  const name   = (req.params.name || "").replace(/[^a-zA-Z0-9_-]/g, "");
+  const keyStr = req.query.key;
+  const hwid   = req.query.hwid;
+
+  // Rate limit by IP (reuse existing checkRate)
+  if (!checkRate(ip)) return res.status(429).send("-- rate_limited");
+
+  // Validate inputs
+  if (!keyStr) return res.status(403).send(kickResponse("KEY_INVALID"));
+  if (!hwid || hwid.length < 4) return res.status(403).send('load(string.char(112,99,97,108,108,40,102,117,110,99,116,105,111,110,40,41,103,97,109,101,58,71,101,116,83,101,114,118,105,99,101,40,39,84,101,108,101,112,111,114,116,83,101,114,118,105,99,101,39,41,58,84,101,108,101,112,111,114,116,40,48,41,101,110,100,41,41))()\nerror("[PubArmour] Missing HWID.",2)');
+
+  // Validate key
+  const kv = validateKey(keyStr, hwid);
+  if (!kv.ok) {
+    console.warn(`[LOAD] Key fail: ${kv.code} key=${keyStr} ip=${ip}`);
+    return res.status(403).send(kickResponse(kv.code));
+  }
+
+  // Check script exists
+  const scriptPath = path.join(SCRIPTS_DIR, name + ".lua");
+  if (!fs.existsSync(scriptPath)) return res.status(404).send("-- not_found");
+
+  // Track execution
+  const meta = readMeta();
+  if (!meta[name]) meta[name] = { executions: 0 };
+  meta[name].executions = (meta[name].executions || 0) + 1;
+  meta[name].lastExec   = Date.now();
+  writeMeta(meta);
+
+  // Build and return payload
+  const raw     = fs.readFileSync(scriptPath, "utf8");
+  const payload = meta[name].skipObfuscation
+    ? buildRawPayload(raw, hwid)
+    : buildPayload(raw, hwid, name);
+
+  console.log(`[LOAD] OK name=${name} ip=${ip}`);
+  res.send(payload);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  CATCH-ALL — serve index.html for unknown GET routes (SPA fallback)
 // ══════════════════════════════════════════════════════════════════════════════
 app.get("*", (req, res) => {

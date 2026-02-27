@@ -100,7 +100,7 @@ function statusEmoji(k) {
 //  PANEL BUILDER
 // ══════════════════════════════════════════════════════════════════════════════
 function buildPanelEmbed(scriptName, s) {
-  const loader = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"\nloadstring(game:HttpGet("${API_URL}/auth/${scriptName}?key="..Pub_key))()`;
+  const loader = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"\nlocal hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())\nloadstring(game:HttpGet("${API_URL}/load/${scriptName}?key="..Pub_key.."&hwid="..hwid))()`;
   return new EmbedBuilder()
     .setColor(C.ok)
     .setTitle(`🛡️ PubArmour — ${scriptName}`)
@@ -180,7 +180,7 @@ client.on("interactionCreate", async interaction => {
         const res  = await fetch(`${API_URL}/api/upload`, { method: "POST", headers: ah(), body: JSON.stringify({ password: UPLOAD_PASSWORD, name, content, description: desc, skipObfuscation: skipObf }) });
         const data = await res.json();
         if (data.error) return interaction.editReply({ embeds: [new EmbedBuilder().setColor(C.err).setDescription("❌ " + data.error)] });
-        const loader = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"\nloadstring(game:HttpGet("${API_URL}/auth/${data.name}?key="..Pub_key))()`;
+        const loader = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"\nlocal hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())\nloadstring(game:HttpGet("${API_URL}/load/${data.name}?key="..Pub_key.."&hwid="..hwid))()`;
         return interaction.editReply({ embeds: [
           new EmbedBuilder().setColor(C.ok).setTitle("✅ Script Uploaded & Protected")
             .addFields(
@@ -337,7 +337,7 @@ client.on("interactionCreate", async interaction => {
           const match = keys.find(k => k.active && (k.note === userId || k.note === userTag || k.note.includes(interaction.user.username)));
           if (match) userKey = match.key;
         } catch {}
-        const loader = `Pub_key = "${userKey}"\nloadstring(game:HttpGet("${API_URL}/auth/${scriptName}?key="..Pub_key))()`;
+        const loader = `Pub_key = "${userKey}"\nlocal hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())\nloadstring(game:HttpGet("${API_URL}/load/${scriptName}?key="..Pub_key.."&hwid="..hwid))()`;
         return interaction.editReply({
           embeds: [new EmbedBuilder().setColor(C.info).setTitle(`Loader for ${scriptName}`).setDescription(`\`\`\`lua\n${loader}\n\`\`\``)
             .setFooter({ text: userKey !== "PA-XXXXXXXXXXXXXXXXXXXX" ? "Your key was auto-filled from your note." : "Replace the key with your own PA- key." })],

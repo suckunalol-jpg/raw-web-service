@@ -428,11 +428,12 @@ function renderScripts(scripts) {
   list.innerHTML = '';
 
   scripts.forEach((s, i) => {
-    const authUrl  = `${BASE}/auth/${s.name}`;
+    const loadUrl  = `${BASE}/load/${s.name}`;
     // Key-based loadstring format
     const keyLine  = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"`;
-    const lsLine   = `loadstring(game:HttpGet("${authUrl}?key="..Pub_key))()`;
-    const fullText = `${keyLine}\n${lsLine}`;
+    const hwidLine = `local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())`;
+    const lsLine   = `loadstring(game:HttpGet("${loadUrl}?key="..Pub_key.."&hwid="..hwid))()`;
+    const fullText = `${keyLine}\n${hwidLine}\n${lsLine}`;
 
     const isRaw    = s.skipObfuscation === true;
 
@@ -463,6 +464,7 @@ function renderScripts(scripts) {
         <div class="loadstr-label">Loader (replace key)</div>
         <div class="loadstr-wrap">
           <div class="loadstr-box" id="ls-${s.name}"><span class="key-line">${keyLine}</span>
+<span class="ls-line">${hwidLine}</span>
 <span class="ls-line">${lsLine}</span></div>
           <button class="btn btn-copy btn-sm" id="copy-${s.name}" title="Copy loader">⎘</button>
         </div>
