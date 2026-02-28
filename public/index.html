@@ -432,8 +432,20 @@ function renderScripts(scripts) {
     // Key-based loadstring format
     const keyLine  = `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"`;
     const hwidLine = `local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())`;
-    const lsLine   = `loadstring(game:HttpGet("${loadUrl}?key="..Pub_key.."&hwid="..hwid))()`;
-    const fullText = `${keyLine}\n${hwidLine}\n${lsLine}`;
+    const lsLine   = `-- Click copy for the full loader`;
+    const fullText = [
+      `Pub_key = "PA-XXXXXXXXXXXXXXXXXXXX"`,
+      `local hwid = tostring(game:GetService("RbxAnalyticsService"):GetClientId())`,
+      `local url = "${loadUrl}?key="..Pub_key.."&hwid="..hwid`,
+      `local ok, res = pcall(function()`,
+      `    return request({Url=url, Method="GET", Headers={["User-Agent"]="PubArmour/2.0"}})`,
+      `end)`,
+      `if ok and res and res.Body then`,
+      `    loadstring(res.Body)()`,
+      `else`,
+      `    loadstring(game:HttpGet(url))()`,
+      `end`,
+    ].join("\n");
 
     const isRaw    = s.skipObfuscation === true;
 

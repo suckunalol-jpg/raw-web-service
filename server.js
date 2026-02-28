@@ -26,6 +26,7 @@ app.get("/health", (_req, res) => res.json({ status: "ok", uptime: process.uptim
 //  LAYER 1 — UA WHITELIST / BROWSER BLOCKLIST
 // ══════════════════════════════════════════════════════════════════════════════
 const ALLOWED_UA = [
+  "PubArmour/",
   "Roblox/WinInet","RobloxStudio","ROBLOX/",
   "Synapse/","SynapseX","KRNL/","Krnl/",
   "fluxus","Fluxus","Script-Ware","scriptware",
@@ -40,9 +41,12 @@ const BROWSER_POISON = [
 ];
 function validateUA(ua) {
   if (!ua || ua.length < 4) return false;
-  if (!ALLOWED_UA.some(s => ua.includes(s))) return false;
+  const uaLower = ua.toLowerCase();
+  // If UA matches a known executor identifier, allow it — skip the poison check
+  if (ALLOWED_UA.some(s => uaLower.includes(s.toLowerCase()))) return true;
+  // No executor ID found — reject if it looks like a browser or bot
   if (BROWSER_POISON.some(s => ua.includes(s))) return false;
-  return true;
+  return false;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -470,28 +474,38 @@ app.get("/load/:name", (req, res) => {
   res.setHeader("Content-Type", "text/plain");
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
 
-  const ip     = req.ip;
-  const name   = (req.params.name || "").replace(/[^a-zA-Z0-9_-]/g, "");
-  const keyStr = req.query.key;
-  const hwid   = req.query.hwid;
+  const ip      = req.ip;
+  const name    = (req.params.name || "").replace(/[^a-zA-Z0-9_-]/g, "");
+  const keyStr  = req.query.key;
+  const hwid    = req.query.hwid;
+  const isDebug = req.query.debug === "1";
+  const ua      = (req.headers["user-agent"] || "(none)").slice(0, 100);
 
-  // Rate limit by IP (reuse existing checkRate)
-  if (!checkRate(ip)) return res.status(429).send("-- rate_limited");
+  console.log(`[LOAD] name=${name} ip=${ip} ua=${ua}`);
+
+  function loadErr(status, debugMsg, kickCode) {
+    if (isDebug) return res.status(status).send(`-- [PubArmour Debug] ${debugMsg}`);
+    if (kickCode) return res.status(status).send(kickResponse(kickCode));
+    return res.status(status).send(`-- error`);
+  }
+
+  // Rate limit
+  if (!checkRate(ip)) return loadErr(429, "Rate limited. Try again in 60s.", null);
 
   // Validate inputs
-  if (!keyStr) return res.status(403).send(kickResponse("KEY_INVALID"));
-  if (!hwid || hwid.length < 4) return res.status(403).send('load(string.char(112,99,97,108,108,40,102,117,110,99,116,105,111,110,40,41,103,97,109,101,58,71,101,116,83,101,114,118,105,99,101,40,39,84,101,108,101,112,111,114,116,83,101,114,118,105,99,101,39,41,58,84,101,108,101,112,111,114,116,40,48,41,101,110,100,41,41))()\nerror("[PubArmour] Missing HWID.",2)');
+  if (!keyStr) return loadErr(403, "Missing key. Add ?key=PA-... to the URL.", "KEY_INVALID");
+  if (!hwid || hwid.length < 4) return loadErr(403, "Missing or invalid hwid. Add &hwid=YOUR_HWID to the URL.", null);
 
   // Validate key
   const kv = validateKey(keyStr, hwid);
   if (!kv.ok) {
     console.warn(`[LOAD] Key fail: ${kv.code} key=${keyStr} ip=${ip}`);
-    return res.status(403).send(kickResponse(kv.code));
+    return loadErr(403, `Key validation failed: ${kv.code}`, kv.code);
   }
 
   // Check script exists
   const scriptPath = path.join(SCRIPTS_DIR, name + ".lua");
-  if (!fs.existsSync(scriptPath)) return res.status(404).send("-- not_found");
+  if (!fs.existsSync(scriptPath)) return loadErr(404, `Script "${name}" not found.`, null);
 
   // Track execution
   const meta = readMeta();
