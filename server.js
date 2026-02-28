@@ -170,11 +170,11 @@ for _,_ch in ipairs(_chunks) do
 end
 local _t1=${vT}()
 if (_t1-_t0)>3 then
-  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  ${vG}(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] Timing violation.")},2) return
 end
 if type(${vG})~="function" or type(${vG}("return 1"))~="function" then
-  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  ${vG}(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] Integrity check failed.")},2) return
 end
 local _hw,_hok
@@ -183,13 +183,13 @@ if not _hok or not _hw or _hw=="" then
   _hw=tostring(game:GetService("Players").LocalPlayer.UserId)
 end
 if _hw~=${vH} then
-  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  ${vG}(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] HWID mismatch.")},2) return
 end
 local ${vF}=${vR}(${vD})
 local _fn,_er=${vG}(${vF})
 if not _fn then
-  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  ${vG}(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(tostring(_er),2)
 end
 return _fn()`.trim();
@@ -208,7 +208,7 @@ if not ${vOK} or not ${vHW} or ${vHW}=="" then
   ${vHW}=tostring(game:GetService("Players").LocalPlayer.UserId)
 end
 if ${vHW}~=${vH} then
-  load(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
+  (loadstring or load)(${encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)")})()
   error(${encStr("[PubArmour] HWID mismatch.")},2) return
 end
 ${src}`.trim();
@@ -225,7 +225,7 @@ function kickResponse(code) {
   const msg  = msgs[code] || "Access denied.";
   const kick = encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)");
   const err  = encStr("[PubArmour] " + msg);
-  return `load(${kick})();error(${err},2)`;
+  return `(loadstring or load)(${kick})();error(${err},2)`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -289,7 +289,7 @@ app.get("/fetch/:token", (req, res) => {
 
   if (!result.ok) {
     const kick = encStr("pcall(function()game:GetService('TeleportService'):Teleport(0)end)");
-    return res.status(403).send(`load(${kick})();error("${result.reason}",2)`);
+    return res.status(403).send(`(loadstring or load)(${kick})();error("${result.reason}",2)`);
   }
 
   const name = result.scriptName;
