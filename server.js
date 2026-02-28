@@ -166,7 +166,7 @@ local ${vD}={}
 local _ci,_di=1,1
 local _chunks={${joinExpr}}
 for _,_ch in ipairs(_chunks) do
-  for _j=1,#_ch do ${vD}[_di]=${vC}(${vB}(_ch[_j])~${vK}) _di=_di+1 end
+  for _j=1,#_ch do ${vD}[_di]=${vC}(bit32.bxor(${vB}(_ch[_j]),${vK})) _di=_di+1 end
 end
 local _t1=${vT}()
 if (_t1-_t0)>3 then
